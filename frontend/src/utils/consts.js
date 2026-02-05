@@ -7,6 +7,10 @@ export const CITY_ROUTE = "/city";
 export const LOGIN_ROUTE = "/login";
 export const REGISTER_ROUTE = "/register";
 export const ABOUT_ROUTE = "/about";
+export const EVALUATE_ROUTE = "/evaluate";
+export const HISTORY_ROUTE = "/history";
+export const PROFILE_ROUTE = "/profile";
+export const EVALUATION_DETAIL_ROUTE = "/history/:id";
 
 export default {
   HOME_ROUTE,
@@ -18,4 +22,8 @@ export default {
   LOGIN_ROUTE,
   REGISTER_ROUTE,
   ABOUT_ROUTE,
+  EVALUATE_ROUTE,
+  HISTORY_ROUTE,
+  PROFILE_ROUTE,
+  EVALUATION_DETAIL_ROUTE,
 };

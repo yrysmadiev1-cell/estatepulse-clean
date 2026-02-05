@@ -197,6 +197,46 @@ a {
     gap: 32px;
 }
 
+.eval-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+}
+
+.eval-controls {
+    min-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.eval-map {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.eval-map__header h2 {
+    margin: 0 0 6px;
+    font-size: 1.4rem;
+}
+
+.map-placeholder {
+    width: 100%;
+    border-radius: 24px;
+    overflow: hidden;
+    border: 1px dashed rgba(37, 99, 235, 0.25);
+    background: #eef2ff;
+}
+
+.map-placeholder svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
 .hero-copy h1 {
     font-size: 2.6rem;
     margin: 12px 0 18px;
@@ -659,6 +699,75 @@ a {
     border-radius: 14px;
     border: 1px solid var(--color-border);
     background: var(--color-surface-strong);
+}
+
+.section-title {
+    margin: 0 0 16px;
+    font-size: 1.2rem;
+}
+
+.profile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 24px;
+    margin-top: 24px;
+}
+
+.profile-card {
+    border-radius: 14px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-strong);
+    padding: 20px;
+    display: grid;
+    gap: 16px;
+}
+
+.profile-label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin-bottom: 4px;
+}
+
+.profile-value {
+    font-weight: 600;
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.history-table th,
+.history-table td {
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: top;
+}
+
+.history-table th {
+    text-align: left;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+}
+
+.history-meta {
+    display: grid;
+    gap: 8px;
+}
+
+.history-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px 24px;
 }
 
 .post-content p {
