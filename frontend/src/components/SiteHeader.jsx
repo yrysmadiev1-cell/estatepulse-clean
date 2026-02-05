@@ -10,6 +10,7 @@ function SiteHeader({ actionLabel = "Добавить аналитику", actio
   const canShowAction = actionLabel && actionTo && (actionTo !== "/posts/new" || isAdmin);
   const navLinks = [
     { label: "Рынок РК", pathname: "/" },
+    { label: "Профиль", pathname: "/profile" },
     ...CITIES.map((city) => ({
       label: city.name,
       pathname: "/city",

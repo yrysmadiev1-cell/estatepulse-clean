@@ -31,3 +31,20 @@ yarn-error.log*
 
 # python
 __pycache__/
+
+
+# dependencies
+**/node_modules/
+**/node_modules/.cache/
+
+# python venv
+.venv/
+
+# ML artifacts (big)
+ml/model/*.joblib
+ml/model/*.pkl
+ml/model/*.onnx
+
+# mongo memory server cache
+backend/node_modules/.cache/mongodb-memory-server/
+**/.cache/mongodb-memory-server/

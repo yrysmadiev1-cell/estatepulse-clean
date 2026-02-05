@@ -8,6 +8,12 @@ import Login from "../components/Login";
 import Register from "../components/Register";
 import CityFeed from "../components/CityFeed";
 import About from "../components/About";
+import Evaluate from "../pages/Evaluate";
+import History from "../pages/History";
+import Profile from "../pages/Profile";
+import EvaluationDetail from "../pages/EvaluationDetail";
+import ProtectedRoute from "../components/ProtectedRoute";
+import NotFound from "../components/NotFound";
 import {
   HOME_ROUTE,
   NEW_POST_ROUTE,
@@ -18,18 +24,48 @@ import {
   LOGIN_ROUTE,
   REGISTER_ROUTE,
   ABOUT_ROUTE,
+  EVALUATE_ROUTE,
+  HISTORY_ROUTE,
+  PROFILE_ROUTE,
+  EVALUATION_DETAIL_ROUTE,
 } from "./consts";
 
 export const routes = [
   { path: HOME_ROUTE, element: <Home /> },
-  { path: NEW_POST_ROUTE, element: <NewPost /> },
+  {
+    path: NEW_POST_ROUTE,
+    element: (
+      <ProtectedRoute requireAdmin>
+        <NewPost />
+      </ProtectedRoute>
+    ),
+  },
   { path: POST_ROUTE, element: <PostPage /> },
-  { path: EDIT_POST_ROUTE, element: <EditPost /> },
-  { path: DELETE_POST_ROUTE, element: <DeletePost /> },
+  {
+    path: EDIT_POST_ROUTE,
+    element: (
+      <ProtectedRoute requireAdmin>
+        <EditPost />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: DELETE_POST_ROUTE,
+    element: (
+      <ProtectedRoute requireAdmin>
+        <DeletePost />
+      </ProtectedRoute>
+    ),
+  },
   { path: CITY_ROUTE, element: <CityFeed /> },
   { path: LOGIN_ROUTE, element: <Login /> },
   { path: REGISTER_ROUTE, element: <Register /> },
   { path: ABOUT_ROUTE, element: <About /> },
+  { path: EVALUATE_ROUTE, element: <Evaluate /> },
+  { path: HISTORY_ROUTE, element: <History /> },
+  { path: PROFILE_ROUTE, element: <Profile /> },
+  { path: EVALUATION_DETAIL_ROUTE, element: <EvaluationDetail /> },
+  { path: "*", element: <NotFound /> },
 ];
 
 export default routes;

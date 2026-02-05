@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const Evaluation = require("./models/Evaluation");
 require("dotenv").config();
 
 const app = express();
@@ -15,8 +16,12 @@ const ADMIN_NAME = process.env.ADMIN_NAME || "admin";
 const CITY_OPTIONS = ["Алматы", "Астана", "Шымкент"];
 const isValidCity = (value) => CITY_OPTIONS.includes(value);
 
-app.use(cors());
+app.use(cors({origin: ["http://localhost:3000"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],}));
 app.use(express.json());
+app.use("/api/evaluate", require("./routes/evaluate"));
+
 
 mongoose
   .connect(MONGO_URI)
@@ -61,8 +66,14 @@ const postSchema = new mongoose.Schema(
   { timestamps: true, collection: "posts" }
 );
 
+
+
 const User = mongoose.model("User", userSchema);
 const Post = mongoose.model("Post", postSchema);
+
+
+
+
 
 const ensureAdminUser = async () => {
   const existing = await User.findOne({ email: ADMIN_EMAIL.toLowerCase() });
@@ -286,6 +297,39 @@ app.delete(
   })
 );
 
+// ====== Evaluations History API =======
+
+// Список оценок текущего пользователя
+app.get(
+  "/api/evaluations",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const items = await Evaluation.find({ "user.id": req.user.id })
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    res.json(items);
+  })
+);
+
+// Одна оценка по ID (только владелец)
+app.get(
+  "/api/evaluations/:id",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const item = await Evaluation.findById(req.params.id);
+    if (!item) return res.status(404).json({ message: "Оценка не найдена" });
+
+    if (item.user?.id !== req.user.id) {
+      return res.status(403).json({ message: "Недостаточно прав" });
+    }
+
+    res.json(item);
+  })
+);
+
+
+
 // ====== Error handling =======
 app.use((err, req, res, next) => {
   console.error("Unhandled error", err);
@@ -294,3 +338,8 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+
+
+
+
+
