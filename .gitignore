@@ -12,7 +12,12 @@
 # production
 /build
 /build/
+**/build/
+frontend/build/
 dist/
+
+# caches
+**/.eslintcache
 
 # misc
 .DS_Store

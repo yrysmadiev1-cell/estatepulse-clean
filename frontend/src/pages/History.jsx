@@ -41,7 +41,7 @@ export default function History() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [token]);
 
   return (
     <div className="page-shell">
@@ -58,7 +58,7 @@ export default function History() {
           ) : items.length === 0 ? (
             <p className="hero-description">Пока нет сохранённых оценок.</p>
           ) : (
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="history-table">
                 <thead>
                   <tr>

@@ -5,6 +5,7 @@ import { getPost } from "../utils/api";
 import SiteHeader from "./SiteHeader";
 import SiteFooter from "./SiteFooter";
 import { useAuth } from "../context/AuthContext";
+import LoadingScreen from "./LoadingScreen";
 
 export default function PostPage() {
   const { id } = useParams();
@@ -38,7 +39,9 @@ export default function PostPage() {
     });
   };
 
-  if (loading) return <main className="container narrow">Загрузка...</main>;
+  if (loading) {
+    return <LoadingScreen actionLabel="На главную" actionTo="/" />;
+  }
   if (error) return <main className="container narrow">Ошибка: {error}</main>;
   if (!post) return <main className="container narrow">Пост не найден</main>;
 

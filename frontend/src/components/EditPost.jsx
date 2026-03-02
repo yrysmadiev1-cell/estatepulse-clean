@@ -7,6 +7,7 @@ import SiteFooter from "./SiteFooter";
 import { useAuth } from "../context/AuthContext";
 import { CATEGORIES } from "../constants/categories";
 import { CITY_NAMES } from "../constants/cities";
+import LoadingScreen from "./LoadingScreen";
 
 function EditPost() {
   const { id } = useParams();
@@ -54,7 +55,9 @@ function EditPost() {
     }
   };
 
-  if (loading) return <main className="container narrow">Загрузка...</main>;
+  if (loading) {
+    return <LoadingScreen actionLabel="На главную" actionTo="/" />;
+  }
   if (error) return <main className="container narrow">Ошибка: {error}</main>;
 
   return (

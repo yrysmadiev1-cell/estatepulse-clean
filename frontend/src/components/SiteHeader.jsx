@@ -10,13 +10,8 @@ function SiteHeader({ actionLabel = "Добавить аналитику", actio
   const canShowAction = actionLabel && actionTo && (actionTo !== "/posts/new" || isAdmin);
   const navLinks = [
     { label: "Рынок РК", pathname: "/" },
-    { label: "Профиль", pathname: "/profile" },
-    ...CITIES.map((city) => ({
-      label: city.name,
-      pathname: "/city",
-      search: `?=${encodeURIComponent(city.name)}`,
-      cityName: city.name,
-    })),
+    { label: "Новости", pathname: "/news" },
+    { label: "Карта", pathname: "/map" },
     { label: "О нас", pathname: "/about" },
   ];
 
@@ -26,17 +21,22 @@ function SiteHeader({ actionLabel = "Добавить аналитику", actio
     return raw ? raw.trim().toLowerCase() : null;
   };
 
-  const activeCity = location.pathname === "/city" ? getCurrentCity() : null;
+  const isCityAwarePage = location.pathname === "/city" || location.pathname === "/map";
+  const activeCity = isCityAwarePage ? getCurrentCity() : null;
 
   const isActive = (link) => {
     if (link.pathname === "/") {
       return location.pathname === "/";
     }
-    if (link.pathname === "/city") {
-      return location.pathname === "/city" && activeCity === link.cityName.toLowerCase();
-    }
     return location.pathname.startsWith(link.pathname);
   };
+
+  const activeCityLabel = activeCity
+    ? CITIES.find((c) => c.name.toLowerCase() === activeCity)?.name
+    : null;
+
+  const cityTargetPath = location.pathname === "/map" ? "/map" : "/city";
+
   return (
     <header className="main-header glass-panel">
       <div className="container wide header-grid">
@@ -54,14 +54,38 @@ function SiteHeader({ actionLabel = "Добавить аналитику", actio
               {link.label}
             </Link>
           ))}
+
+          <details className={`city-menu ${isCityAwarePage ? "active" : ""}`}>
+            <summary className="ghost-link">
+              {activeCityLabel ? `Город: ${activeCityLabel}` : "Города"}
+            </summary>
+            <div className="city-dropdown">
+              {CITIES.map((city) => (
+                <Link
+                  key={city.name}
+                  to={{ pathname: cityTargetPath, search: `?city=${encodeURIComponent(city.name)}` }}
+                  className={`city-option ${activeCity === city.name.toLowerCase() ? "active" : ""}`}
+                >
+                  {city.name}
+                </Link>
+              ))}
+            </div>
+          </details>
+
+          <Link to="/evaluate" className="btn btn-primary nav-cta">
+            Оценить объект
+          </Link>
+
           {canShowAction && (
-            <Link to={actionTo} className="btn btn-primary nav-cta">
+            <Link to={actionTo} className="btn btn-secondary nav-cta">
               {actionLabel}
             </Link>
           )}
           {user ? (
             <>
-              <span className="user-chip">{user.name}</span>
+              <Link to="/profile" className="user-chip">
+                {user.name}
+              </Link>
               <button type="button" className="ghost-link" onClick={logout}>
                 Выйти
               </button>

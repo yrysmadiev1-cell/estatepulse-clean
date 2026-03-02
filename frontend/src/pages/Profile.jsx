@@ -46,7 +46,7 @@ export default function Profile() {
 
   return (
     <div className="page-shell">
-      <SiteHeader actionLabel="Оценить объект" actionTo="/evaluate" />
+      <SiteHeader actionLabel={null} actionTo={null} />
       <main className="container wide">
         <section className="glass-panel">
           <p className="eyebrow">Личный кабинет</p>
@@ -79,6 +79,17 @@ export default function Profile() {
                     <p className="profile-label">Email</p>
                     <p className="profile-value">{user?.email || "—"}</p>
                   </div>
+
+                  <div>
+                    <p className="profile-label">Подписка</p>
+                    <p className="profile-value">Base</p>
+                    <div className="history-actions" style={{ marginTop: 10 }}>
+                      <Link to="/plans" className="btn btn-secondary">
+                        Планы
+                      </Link>
+                    </div>
+                  </div>
+
                   <div className="article-pills">
                     <span className="badge">Авторизован</span>
                     {user?.role === "admin" && <span className="badge badge-city">Админ</span>}
@@ -96,7 +107,7 @@ export default function Profile() {
                   <div className="profile-card">Пока нет сохранённых оценок.</div>
                 ) : (
                   <div className="profile-card">
-                    <div style={{ overflowX: "auto" }}>
+                    <div className="table-scroll">
                       <table className="history-table">
                         <thead>
                           <tr>

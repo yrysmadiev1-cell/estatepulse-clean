@@ -3,7 +3,14 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const cron = require("node-cron");
 const Evaluation = require("./models/Evaluation");
+const newsRoutes = require("./routes/news");
+const newsIndexRoutes = require("./routes/newsIndex");
+const newsTrendRoutes = require("./routes/newsTrend");
+const newsHeatmapRoutes = require("./routes/newsHeatmap");
+const newsCollectRoutes = require("./routes/newsCollect");
+const { runCollectKapitalJob } = require("./jobs/collectKapitalJob");
 require("dotenv").config();
 
 const app = express();
@@ -21,6 +28,11 @@ app.use(cors({origin: ["http://localhost:3000"],
   allowedHeaders: ["Content-Type", "Authorization"],}));
 app.use(express.json());
 app.use("/api/evaluate", require("./routes/evaluate"));
+app.use("/api/news", newsRoutes);
+app.use("/api/news", newsIndexRoutes);
+app.use("/api/news", newsTrendRoutes);
+app.use("/api/news", newsHeatmapRoutes);
+app.use("/api/news/collect", newsCollectRoutes);
 
 
 mongoose
@@ -31,7 +43,35 @@ mongoose
   })
   .catch((err) => console.error("Mongo error:", err));
 
+const ENABLE_CRON = process.env.ENABLE_CRON !== "false";
+
+// Каждый час в 00 минут (например 15:00, 16:00, 17:00...)
+if (ENABLE_CRON) {
+  cron.schedule("0 * * * *", async () => {
+    try {
+      // Avoid running before initial DB connection.
+      if (mongoose.connection.readyState !== 1) {
+        console.log("[cron] skipped: mongo not connected");
+        return;
+      }
+
+      console.log("[cron] collectKapitalJob started");
+      const stats = await runCollectKapitalJob({ perSection: 15, delayMs: 300, maxNew: 20 });
+      console.log("[cron] collectKapitalJob finished:", stats);
+    } catch (e) {
+      console.error("[cron] collectKapitalJob error:", e?.message || e);
+    }
+  });
+  console.log("[cron] enabled: running every hour at minute 0");
+} else {
+  console.log("[cron] disabled (ENABLE_CRON=false)");
+}
+
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+function escapeRegExp(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 // ====== Модели =======
 const userSchema = new mongoose.Schema(
@@ -57,6 +97,18 @@ const postSchema = new mongoose.Schema(
     date: { type: String, default: () => new Date().toISOString().split("T")[0] },
     category: { type: String, default: "Аналитика" },
     city: { type: String, enum: CITY_OPTIONS, default: CITY_OPTIONS[0], index: true },
+
+    // --- Auto-news metadata (EstatePulse AI) ---
+    isAuto: { type: Boolean, default: false, index: true },
+    sourceUrl: { type: String, index: true }, // original article URL
+    sourceName: { type: String }, // e.g. "Kapital.kz"
+    tags: [{ type: String, index: true }],
+
+    impactScore: { type: Number, min: 0, max: 100, index: true },
+    impactDirection: { type: String, enum: ["up", "down", "neutral"] },
+    impactHorizon: { type: String, enum: ["short", "medium", "long"] },
+
+    newsArticleId: { type: mongoose.Schema.Types.ObjectId, ref: "NewsArticle", index: true },
     author: {
       id: { type: String },
       name: String,
@@ -189,16 +241,45 @@ app.post(
 app.get(
   "/posts",
   asyncHandler(async (req, res) => {
+    const { city, category, isAuto, tag, sort, q: titleQuery, days, sourceName } = req.query;
+
     const filter = {};
-    const { city } = req.query;
     if (city) {
       if (!isValidCity(city)) {
         return res.status(400).json({ message: "Неизвестный город" });
       }
       filter.city = city;
     }
+    if (category) {
+      filter.category = category;
+    }
+    if (isAuto === "true") filter.isAuto = true;
+    if (isAuto === "false") filter.isAuto = false;
+    if (tag) filter.tags = tag;
+    if (sourceName) filter.sourceName = String(sourceName);
 
-    const posts = await Post.find(filter).sort({ createdAt: -1 });
+    if (titleQuery && String(titleQuery).trim()) {
+      const safe = escapeRegExp(String(titleQuery).trim());
+      filter.title = { $regex: safe, $options: "i" };
+    }
+
+    if (typeof days !== "undefined" && String(days).trim()) {
+      const n = Math.max(1, Math.min(365, Number(days)));
+      if (Number.isFinite(n)) {
+        const since = new Date();
+        since.setDate(since.getDate() - n);
+        filter.createdAt = { $gte: since };
+      }
+    }
+
+    let mongoQuery = Post.find(filter);
+    if (sort === "impact") {
+      mongoQuery = mongoQuery.sort({ impactScore: -1, createdAt: -1 });
+    } else {
+      mongoQuery = mongoQuery.sort({ createdAt: -1 });
+    }
+
+    const posts = await mongoQuery.exec();
     res.json(posts);
   })
 );

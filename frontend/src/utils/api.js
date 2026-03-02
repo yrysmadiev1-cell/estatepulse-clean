@@ -25,8 +25,32 @@ function buildHeaders(token, extra = {}) {
 
 export function getPosts(params = {}) {
   const url = new URL(POSTS_URL);
+  if (params.q) {
+    url.searchParams.set("q", params.q);
+  }
   if (params.city) {
     url.searchParams.set("city", params.city);
+  }
+  if (params.category) {
+    url.searchParams.set("category", params.category);
+  }
+  if (params.isAuto === true) {
+    url.searchParams.set("isAuto", "true");
+  }
+  if (params.isAuto === false) {
+    url.searchParams.set("isAuto", "false");
+  }
+  if (params.tag) {
+    url.searchParams.set("tag", params.tag);
+  }
+  if (params.sourceName) {
+    url.searchParams.set("sourceName", params.sourceName);
+  }
+  if (params.days) {
+    url.searchParams.set("days", String(params.days));
+  }
+  if (params.sort) {
+    url.searchParams.set("sort", params.sort);
   }
   return request(url.toString());
 }
@@ -74,7 +98,7 @@ export function loginUser(payload) {
   });
 }
 
-export default {
+const api = {
   getPosts,
   getPost,
   createPost,
@@ -83,3 +107,5 @@ export default {
   registerUser,
   loginUser,
 };
+
+export default api;

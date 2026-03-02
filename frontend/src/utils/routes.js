@@ -8,9 +8,12 @@ import Login from "../components/Login";
 import Register from "../components/Register";
 import CityFeed from "../components/CityFeed";
 import About from "../components/About";
+import News from "../pages/News";
 import Evaluate from "../pages/Evaluate";
+import MapPage from "../pages/Map";
 import History from "../pages/History";
 import Profile from "../pages/Profile";
+import Plans from "../pages/Plans";
 import EvaluationDetail from "../pages/EvaluationDetail";
 import ProtectedRoute from "../components/ProtectedRoute";
 import NotFound from "../components/NotFound";
@@ -24,14 +27,18 @@ import {
   LOGIN_ROUTE,
   REGISTER_ROUTE,
   ABOUT_ROUTE,
+  NEWS_ROUTE,
   EVALUATE_ROUTE,
+  MAP_ROUTE,
   HISTORY_ROUTE,
   PROFILE_ROUTE,
   EVALUATION_DETAIL_ROUTE,
+  PLANS_ROUTE,
 } from "./consts";
 
 export const routes = [
   { path: HOME_ROUTE, element: <Home /> },
+  { path: NEWS_ROUTE, element: <News /> },
   {
     path: NEW_POST_ROUTE,
     element: (
@@ -62,8 +69,10 @@ export const routes = [
   { path: REGISTER_ROUTE, element: <Register /> },
   { path: ABOUT_ROUTE, element: <About /> },
   { path: EVALUATE_ROUTE, element: <Evaluate /> },
+  { path: MAP_ROUTE, element: <MapPage /> },
   { path: HISTORY_ROUTE, element: <History /> },
   { path: PROFILE_ROUTE, element: <Profile /> },
+  { path: PLANS_ROUTE, element: <Plans /> },
   { path: EVALUATION_DETAIL_ROUTE, element: <EvaluationDetail /> },
   { path: "*", element: <NotFound /> },
 ];

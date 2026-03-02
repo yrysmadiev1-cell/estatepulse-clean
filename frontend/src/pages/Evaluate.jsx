@@ -1,11 +1,14 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import "../components/style.css";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
 import { useAuth } from "../context/AuthContext";
 
+const CITY_OPTIONS = ["Алматы", "Астана", "Шымкент"];
+
 export default function Evaluate() {
   const { token } = useAuth();
+  const [city, setCity] = useState("Алматы");
   const [form, setForm] = useState({
     area: 65,
     rooms: 2,
@@ -17,11 +20,66 @@ export default function Evaluate() {
     condition: "unknown",
   });
 
+  const [marketIndex7, setMarketIndex7] = useState(null);
+  const [marketIndex30, setMarketIndex30] = useState(null);
+  const [loadingIndex, setLoadingIndex] = useState(false);
+  const [indexError, setIndexError] = useState("");
+
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const numeric = new Set(["area", "rooms", "floor", "total_floors", "ceiling_height", "house_age"]);
+
+  const cityForIndex = useMemo(() => city || "Алматы", [city]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadIndex(days) {
+      const resp = await fetch(
+        `/api/news/index?city=${encodeURIComponent(cityForIndex)}&days=${days}`
+      );
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || data?.message || "Ошибка индекса");
+      return data;
+    }
+
+    async function load() {
+      setLoadingIndex(true);
+      setIndexError("");
+      try {
+        const [idx7, idx30] = await Promise.all([loadIndex(7), loadIndex(30)]);
+        if (cancelled) return;
+        setMarketIndex7(idx7);
+        setMarketIndex30(idx30);
+      } catch (e) {
+        if (cancelled) return;
+        setIndexError(e?.message || "Ошибка индекса");
+        setMarketIndex7(null);
+        setMarketIndex30(null);
+      } finally {
+        if (!cancelled) setLoadingIndex(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [cityForIndex]);
+
+  function interpretIndex(value) {
+    if (value > 10) return "позитивный";
+    if (value < -10) return "негативный";
+    return "нейтральный";
+  }
+
+  function formatSigned(value) {
+    if (typeof value !== "number") return "0";
+    const n = Math.round(value * 10) / 10;
+    return n > 0 ? `+${n}` : `${n}`;
+  }
 
   function onChange(e) {
     const { name, value } = e.target;
@@ -56,6 +114,52 @@ export default function Evaluate() {
     <div className="page-shell">
       <SiteHeader actionLabel="На главную" actionTo="/" />
       <main className="container narrow">
+        <section className="glass-panel" style={{ marginBottom: 20 }}>
+          <p className="eyebrow">Новостной фон</p>
+          <h2 style={{ marginTop: 8 }}>News Pressure Index</h2>
+
+          <div className="form-group" style={{ marginTop: 14 }}>
+            <label htmlFor="index-city">Город</label>
+            <select
+              id="index-city"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              className="form-control"
+            >
+              {CITY_OPTIONS.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          {loadingIndex && <p className="form-lead">Загружаю индекс…</p>}
+          {indexError && <p className="form-error">{indexError}</p>}
+
+          {!loadingIndex && !indexError && (marketIndex7 || marketIndex30) && (
+            <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+              {marketIndex7 && (
+                <div>
+                  <strong>Новостной фон (7 дней):</strong> {formatSigned(marketIndex7.normalizedIndex)}
+                  {" "}({interpretIndex(marketIndex7.normalizedIndex)})
+                  <div style={{ color: "var(--color-text-muted)" }}>
+                    Позитивных: {marketIndex7.positiveCount}, Негативных: {marketIndex7.negativeCount}, Нейтральных: {marketIndex7.neutralCount} · Всего: {marketIndex7.count} · Avg impact: {marketIndex7.avgImpactScore}
+                  </div>
+                </div>
+              )}
+
+              {marketIndex30 && (
+                <div>
+                  <strong>Новостной фон (30 дней):</strong> {formatSigned(marketIndex30.normalizedIndex)}
+                  {" "}({interpretIndex(marketIndex30.normalizedIndex)})
+                  <div style={{ color: "var(--color-text-muted)" }}>
+                    Позитивных: {marketIndex30.positiveCount}, Негативных: {marketIndex30.negativeCount}, Нейтральных: {marketIndex30.neutralCount} · Всего: {marketIndex30.count} · Avg impact: {marketIndex30.avgImpactScore}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
         <section className="form-panel glass-panel">
           <p className="eyebrow">Оценка недвижимости</p>
           <h1 className="post-title">Рассчитайте стоимость</h1>
@@ -185,6 +289,23 @@ export default function Evaluate() {
               <strong>Цена за м²:</strong>{" "}
               {Math.round(result.predicted_price / form.area).toLocaleString()} ₸
             </div>
+
+            {marketIndex7 && typeof marketIndex7.normalizedIndex === "number" && (
+              <div style={{ marginTop: 12 }}>
+                <strong>Adjusted price (по новостям):</strong>{" "}
+                {(() => {
+                  const basePrice = Number(result.predicted_price);
+                  const alpha = 0.03;
+                  const kRaw = marketIndex7.normalizedIndex / 100;
+                  const k = Math.max(-1, Math.min(1, kRaw));
+                  const adjusted = basePrice * (1 + alpha * k);
+                  return `${Math.round(adjusted).toLocaleString()} ₸`;
+                })()}
+                <div style={{ color: "var(--color-text-muted)" }}>
+                  Формула: adjusted = base × (1 + 0.03 × clamp(index/100, -1, +1))
+                </div>
+              </div>
+            )}
           </section>
         )}
       </main>

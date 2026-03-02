@@ -5,6 +5,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import SiteHeader from "./SiteHeader";
 import SiteFooter from "./SiteFooter";
 import { useAuth } from "../context/AuthContext";
+import LoadingScreen from "./LoadingScreen";
 
 function DeletePost() {
   const { id } = useParams();
@@ -39,7 +40,9 @@ function DeletePost() {
     }
   };
 
-  if (loading) return <main className="container narrow">Загрузка...</main>;
+  if (loading) {
+    return <LoadingScreen actionLabel="На главную" actionTo="/" />;
+  }
   if (error) return <main className="container narrow">Ошибка: {error}</main>;
   if (!post) return <main className="container narrow">Пост не найден</main>;
 
