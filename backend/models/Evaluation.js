@@ -9,6 +9,8 @@ const evaluationSchema = new mongoose.Schema(
     },
 
     input: {
+      city: { type: String, required: true },       // <-- ДОБАВЛЕНО
+      district: { type: String, required: true },   // <-- ДОБАВЛЕНО
       area: { type: Number, required: true },
       rooms: { type: Number, required: true },
       floor: { type: Number, required: true },

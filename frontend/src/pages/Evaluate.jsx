@@ -3,13 +3,22 @@ import "../components/style.css";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
 import { useAuth } from "../context/AuthContext";
+import { DISTRICTS_BY_CITY } from "../constants/cities";
 
 const CITY_OPTIONS = ["Алматы", "Астана", "Шымкент"];
+const ML_CITY_OPTIONS = ["Алматы", "Астана"];
+
+function getDefaultDistrict(cityName) {
+  const options = DISTRICTS_BY_CITY[cityName] || [];
+  return options[0]?.value || "unknown";
+}
 
 export default function Evaluate() {
   const { token } = useAuth();
   const [city, setCity] = useState("Алматы");
+  const [indexCity, setIndexCity] = useState("Алматы");
   const [form, setForm] = useState({
+    district: getDefaultDistrict("Алматы"),
     area: 65,
     rooms: 2,
     floor: 5,
@@ -31,7 +40,19 @@ export default function Evaluate() {
 
   const numeric = new Set(["area", "rooms", "floor", "total_floors", "ceiling_height", "house_age"]);
 
-  const cityForIndex = useMemo(() => city || "Алматы", [city]);
+  const cityForIndex = useMemo(() => indexCity || "Алматы", [indexCity]);
+  const districtOptions = useMemo(
+    () => DISTRICTS_BY_CITY[city] || [],
+    [city]
+  );
+
+  useEffect(() => {
+    if (!districtOptions.length) return;
+    const isValid = districtOptions.some((option) => option.value === form.district);
+    if (!isValid) {
+      setForm((prev) => ({ ...prev, district: districtOptions[0].value }));
+    }
+  }, [districtOptions, form.district]);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +119,10 @@ export default function Evaluate() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          city,
+        }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data?.message || "Ошибка API");
@@ -122,8 +146,8 @@ export default function Evaluate() {
             <label htmlFor="index-city">Город</label>
             <select
               id="index-city"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
+              value={indexCity}
+              onChange={(e) => setIndexCity(e.target.value)}
               className="form-control"
             >
               {CITY_OPTIONS.map((c) => (
@@ -166,6 +190,51 @@ export default function Evaluate() {
           <p className="form-lead">Заполните параметры объекта, чтобы получить ориентировочную цену.</p>
 
           <form onSubmit={onSubmit} className="form-stack">
+            <div className="form-group">
+              <label htmlFor="eval-city">Город</label>
+              <select
+                id="eval-city"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="form-control"
+              >
+                {ML_CITY_OPTIONS.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="eval-district">Район</label>
+              {districtOptions.length ? (
+                <select
+                  id="eval-district"
+                  name="district"
+                  value={form.district}
+                  onChange={onChange}
+                  className="form-control"
+                  required
+                >
+                  {districtOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  id="eval-district"
+                  name="district"
+                  type="text"
+                  value={form.district}
+                  onChange={onChange}
+                  className="form-control"
+                  placeholder="Например: Алматы р-н"
+                  required
+                />
+              )}
+            </div>
+
             <div className="form-group">
               <label htmlFor="eval-area">Площадь (м²)</label>
               <input

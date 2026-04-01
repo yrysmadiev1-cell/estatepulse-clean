@@ -1,33 +1,94 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import re
 from typing import List, Optional
 import joblib
 import pandas as pd
+import os
 
-app = FastAPI()
+app = FastAPI(title="EstatePulse ML & NLP Service")
 
-pipeline = joblib.load("../model/price_pipeline.joblib")
+# ===== ML: ЗАГРУЗКА МОДЕЛЕЙ =====
+# Пытаемся загрузить модели для обоих городов.
+# Убедись, что almaty_pipeline.joblib и astana_pipeline.joblib лежат в папке model!
+almaty_pipeline = None
+astana_pipeline = None
+try:
+    almaty_pipeline = joblib.load("../model/almaty_pipeline.joblib")
+    astana_pipeline = joblib.load("../model/astana_pipeline.joblib")
+    print("✅ ML Модели успешно загружены!")
+except Exception as e:
+    print(f"⚠️ Ошибка загрузки моделей: {e}. Проверьте пути к файлам .joblib!")
 
+
+# ===== ML: СХЕМЫ И ЭНДПОИНТ =====
 class PredictRequest(BaseModel):
+    city: str               # 'almaty' или 'astana'
     area: float
     rooms: int
     floor: int
-    total_floors: int
-    ceiling_height: float
     house_age: int
     house_type: str
     condition: str
+    district: str           # НОВОЕ ПОЛЕ: Район
+    total_floors: float = 0.0     # По умолчанию 0 (используется только для Астаны)
+    ceiling_height: float = 0.0   # По умолчанию 0 (используется только для Астаны)
 
 @app.post("/predict")
 def predict(req: PredictRequest):
-    df = pd.DataFrame([req.dict()])
-    price = float(pipeline.predict(df)[0])
-    return {"predicted_price": price}
+    city = req.city.lower().strip()
+
+    if almaty_pipeline is None or astana_pipeline is None:
+        raise HTTPException(status_code=500, detail="Модели не загрузились при старте сервера.")
+
+    # Формируем DataFrame в формате, который ожидает конкретная модель
+    if city == "almaty" or city == "алматы":
+        df = pd.DataFrame([
+            {
+                "area": req.area,
+                "number_of_rooms": req.rooms,
+                "floor": req.floor,
+                "house_age": req.house_age,
+                "district": req.district,
+                "structure_type": req.house_type,
+                "quality": req.condition,
+            }
+        ])
+    elif city == "astana" or city == "астана" or city == "нур-султан":
+        df = pd.DataFrame([
+            {
+                "area": req.area,
+                "rooms": req.rooms,
+                "floor": req.floor,
+                "total_floors": req.total_floors,
+                "ceiling_height": req.ceiling_height,
+                "house_age": req.house_age,
+                "district": req.district,
+                "house_type": req.house_type,
+                "condition": req.condition,
+            }
+        ])
+    else:
+        raise HTTPException(status_code=400, detail="Город должен быть 'almaty' или 'astana'")
+    
+    try:
+        # Маршрутизация по городам
+        if city == "almaty" or city == "алматы":
+            price = float(almaty_pipeline.predict(df)[0])
+        elif city == "astana" or city == "астана" or city == "нур-султан":
+            price = float(astana_pipeline.predict(df)[0])
+        else:
+            raise HTTPException(status_code=400, detail="Город должен быть 'almaty' или 'astana'")
+            
+        return {"predicted_price": price}
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ===== NLP (MVP, heuristic) =====
+# ==========================================================
+# ===== NLP (MVP, heuristic) - ТВОЙ КОД ОСТАЕТСЯ БЕЗ ИЗМЕНЕНИЙ =====
+# ==========================================================
 
 class NLPRequest(BaseModel):
     title: str
@@ -36,13 +97,11 @@ class NLPRequest(BaseModel):
     source: Optional[str] = None
     published_at: Optional[str] = None
 
-
 class NumberFact(BaseModel):
     kind: str                 # percent/money/rate/other
     value: float
     unit: str
     raw: str
-
 
 class Impact(BaseModel):
     direction: str            # up/down/neutral
@@ -50,7 +109,6 @@ class Impact(BaseModel):
     horizon: str              # short/medium/long
     explanation: str
     stated_impact_percent: Optional[float] = None
-
 
 class NLPResponse(BaseModel):
     category: str
@@ -61,7 +119,6 @@ class NLPResponse(BaseModel):
     numbers: List[NumberFact] = []
     impact: Impact
 
-
 CITY_MAP = {
     "алматы": "Алматы",
     "астана": "Астана",
@@ -69,7 +126,6 @@ CITY_MAP = {
     "шымкент": "Шымкент",
 }
 
-# простые словари для routing + impact
 KW_REAL_ESTATE = [
     "недвиж", "квартира", "жиль", "жк ", "жк.", "ипотек", "аренд", "застрой",
     "квадратн", "м2", "кв.м", "вторич", "первич", "новостро", "долев"
@@ -94,10 +150,8 @@ TAG_RULES = {
 POS_WORDS = ["рост", "увелич", "повыш", "улучш", "поддерж", "снижен налог", "льгот", "запуск"]
 NEG_WORDS = ["паден", "сниж", "ухудш", "кризис", "дефицит", "подорож", "повышен ставк", "огранич"]
 
-
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
-
 
 def detect_city(text: str) -> Optional[str]:
     t = text.lower()
@@ -106,13 +160,11 @@ def detect_city(text: str) -> Optional[str]:
             return v
     return None
 
-
 def classify_category(text: str) -> str:
     t = text.lower()
     score_re = sum(1 for w in KW_REAL_ESTATE if w in t)
     score_fin = sum(1 for w in KW_FINANCE if w in t)
     score_mac = sum(1 for w in KW_MACRO if w in t)
-    # приоритет: real_estate если явно много “жилья/ипотеки”
     if score_re >= 2 and score_re >= score_fin and score_re >= score_mac:
         return "real_estate"
     if score_fin >= 2 and score_fin >= score_mac:
@@ -120,7 +172,6 @@ def classify_category(text: str) -> str:
     if score_mac >= 2:
         return "macro"
     return "other"
-
 
 def extract_tags(text: str) -> List[str]:
     t = text.lower()
@@ -130,18 +181,14 @@ def extract_tags(text: str) -> List[str]:
             tags.add(tag)
     return sorted(tags)
 
-
 def extract_numbers(text: str) -> List[NumberFact]:
     facts: List[NumberFact] = []
     t = text
 
-    # проценты: 12.5% или 12 %
     for m in re.finditer(r"(\d+(?:[.,]\d+)?)\s*%", t):
         val = float(m.group(1).replace(",", "."))
         facts.append(NumberFact(kind="percent", value=val, unit="%", raw=m.group(0)))
 
-    # ставка: "16,75%" часто уже попадёт в percent, но добавим heuristic "ставк"
-    # деньги: "12 млрд тенге", "500 млн тг", "1 200 000 тг"
     money_patterns = [
         (r"(\d+(?:[ \u00A0]\d{3})*(?:[.,]\d+)?)\s*(?:тг|тенге|₸)", "KZT"),
         (r"(\d+(?:[.,]\d+)?)\s*(?:млрд)\s*(?:тг|тенге|₸)?", "KZT_bln"),
@@ -157,14 +204,10 @@ def extract_numbers(text: str) -> List[NumberFact]:
             except:
                 pass
 
-    # ограничим количество
     return facts[:20]
 
-
 def simple_summary(title: str, text: str, max_sentences: int = 5) -> str:
-    # очень простой extractive summary: берём первые N “нормальных” предложений
     clean = _norm(text)
-    # режем по . ! ?  (грубо, но работает для MVP)
     sents = re.split(r"(?<=[\.\!\?])\s+", clean)
     good = []
     for s in sents:
@@ -176,22 +219,17 @@ def simple_summary(title: str, text: str, max_sentences: int = 5) -> str:
             break
     if not good:
         good = [clean[:500]] if clean else []
-    # добавим заголовок в начало как контекст
     out = f"{_norm(title)}.\n\n" + "\n\n".join(good)
     return out[:1200]
 
-
 def compute_impact(category: str, tags: List[str], text: str) -> Impact:
     t = text.lower()
-
     direction = "neutral"
     score = 35
     horizon = "medium"
     explanation = "Нейтральный новостной фон."
 
-    # базовые правила
     if "базовая_ставка" in tags or "ставки" in tags:
-        # рост ставок обычно давит на рынок жилья (ипотека)
         if "повыш" in t or "увелич" in t:
             direction = "down"
             score = 80
@@ -204,7 +242,6 @@ def compute_impact(category: str, tags: List[str], text: str) -> Impact:
             explanation = "Снижение ставок может удешевить ипотеку и поддержать спрос на жильё."
 
     if "инфляция" in tags:
-        # инфляция часто ведёт к удорожанию стройки/номинальному росту цен
         if "ускор" in t or "рост" in t:
             direction = "up"
             score = max(score, 65)
@@ -217,7 +254,6 @@ def compute_impact(category: str, tags: List[str], text: str) -> Impact:
             explanation = "Замедление инфляции снижает давление издержек, эффект для жилья умеренный."
 
     if "метро" in tags or "строительство" in tags:
-        # инфраструктура чаще позитивна локально, эффект средне/долгосрочный
         direction = "up"
         score = max(score, 75)
         horizon = "long"
@@ -226,17 +262,14 @@ def compute_impact(category: str, tags: List[str], text: str) -> Impact:
     if category == "real_estate":
         score = max(score, 55)
 
-    # подкрутка по лексике
     pos_hits = sum(1 for w in POS_WORDS if w in t)
     neg_hits = sum(1 for w in NEG_WORDS if w in t)
     score = int(max(0, min(100, score + 5 * (pos_hits - neg_hits))))
 
-    # если direction neutral, но score высокий — скорректируем
     if direction == "neutral" and score >= 70:
         direction = "up" if pos_hits >= neg_hits else "down"
 
     return Impact(direction=direction, score=score, horizon=horizon, explanation=explanation)
-
 
 @app.post("/nlp/analyze-article", response_model=NLPResponse)
 def nlp_analyze_article(req: NLPRequest):
@@ -260,5 +293,8 @@ def nlp_analyze_article(req: NLPRequest):
         impact=impact,
     )
 
-    # Explicit UTF-8 charset helps some clients (e.g., Windows PowerShell) decode Cyrillic correctly.
     return JSONResponse(content=resp.model_dump(), media_type="application/json; charset=utf-8")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
