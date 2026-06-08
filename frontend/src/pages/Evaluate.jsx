@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import "../components/style.css";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
+import EvaluationForecast from "../components/EvaluationForecast";
 import { useAuth } from "../context/AuthContext";
+import { useUi } from "../context/UiContext";
 import { DISTRICTS_BY_CITY } from "../constants/cities";
 
 const CITY_OPTIONS = ["Алматы", "Астана", "Шымкент"];
@@ -13,8 +15,29 @@ function getDefaultDistrict(cityName) {
   return options[0]?.value || "unknown";
 }
 
+async function fetchNewsIndex(cityName, days) {
+  const resp = await fetch(`/api/news/index?city=${encodeURIComponent(cityName)}&days=${days}`);
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data?.error || data?.message || "Ошибка индекса");
+  return data;
+}
+
+async function fetchForecastNewsSnapshot(cityName) {
+  const [marketIndex7, marketIndex30] = await Promise.all([
+    fetchNewsIndex(cityName, 7),
+    fetchNewsIndex(cityName, 30),
+  ]);
+
+  return {
+    city: cityName,
+    short_term: marketIndex7,
+    medium_term: marketIndex30,
+  };
+}
+
 export default function Evaluate() {
   const { token } = useAuth();
+  const { t } = useUi();
   const [city, setCity] = useState("Алматы");
   const [indexCity, setIndexCity] = useState("Алматы");
   const [form, setForm] = useState({
@@ -55,22 +78,20 @@ export default function Evaluate() {
   }, [districtOptions, form.district]);
 
   useEffect(() => {
-    let cancelled = false;
+    setIndexCity(city);
+  }, [city]);
 
-    async function loadIndex(days) {
-      const resp = await fetch(
-        `/api/news/index?city=${encodeURIComponent(cityForIndex)}&days=${days}`
-      );
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data?.error || data?.message || "Ошибка индекса");
-      return data;
-    }
+  useEffect(() => {
+    let cancelled = false;
 
     async function load() {
       setLoadingIndex(true);
       setIndexError("");
       try {
-        const [idx7, idx30] = await Promise.all([loadIndex(7), loadIndex(30)]);
+        const [idx7, idx30] = await Promise.all([
+          fetchNewsIndex(cityForIndex, 7),
+          fetchNewsIndex(cityForIndex, 30),
+        ]);
         if (cancelled) return;
         setMarketIndex7(idx7);
         setMarketIndex30(idx30);
@@ -113,6 +134,13 @@ export default function Evaluate() {
     setError("");
     setResult(null);
     try {
+      let newsSnapshot = null;
+      try {
+        newsSnapshot = await fetchForecastNewsSnapshot(city);
+      } catch (newsErr) {
+        newsSnapshot = null;
+      }
+
       const resp = await fetch("/api/evaluate", {
         method: "POST",
         headers: {
@@ -122,6 +150,7 @@ export default function Evaluate() {
         body: JSON.stringify({
           ...form,
           city,
+          newsSnapshot,
         }),
       });
       const data = await resp.json();
@@ -136,14 +165,14 @@ export default function Evaluate() {
 
   return (
     <div className="page-shell">
-      <SiteHeader actionLabel="На главную" actionTo="/" />
+      <SiteHeader actionLabel={t("common.home")} actionTo="/" />
       <main className="container narrow">
         <section className="glass-panel" style={{ marginBottom: 20 }}>
-          <p className="eyebrow">Новостной фон</p>
-          <h2 style={{ marginTop: 8 }}>News Pressure Index</h2>
+          <p className="eyebrow">{t("evaluate.newsEyebrow")}</p>
+          <h2 style={{ marginTop: 8 }}>{t("evaluate.newsTitle")}</h2>
 
           <div className="form-group" style={{ marginTop: 14 }}>
-            <label htmlFor="index-city">Город</label>
+            <label htmlFor="index-city">{t("evaluate.cityLabel")}</label>
             <select
               id="index-city"
               value={indexCity}
@@ -156,7 +185,7 @@ export default function Evaluate() {
             </select>
           </div>
 
-          {loadingIndex && <p className="form-lead">Загружаю индекс…</p>}
+          {loadingIndex && <p className="form-lead">{t("evaluate.loadingIndex")}</p>}
           {indexError && <p className="form-error">{indexError}</p>}
 
           {!loadingIndex && !indexError && (marketIndex7 || marketIndex30) && (
@@ -185,9 +214,9 @@ export default function Evaluate() {
         </section>
 
         <section className="form-panel glass-panel">
-          <p className="eyebrow">Оценка недвижимости</p>
-          <h1 className="post-title">Рассчитайте стоимость</h1>
-          <p className="form-lead">Заполните параметры объекта, чтобы получить ориентировочную цену.</p>
+          <p className="eyebrow">{t("evaluate.objectEyebrow")}</p>
+          <h1 className="post-title">{t("evaluate.objectTitle")}</h1>
+          <p className="form-lead">{t("evaluate.objectLead")}</p>
 
           <form onSubmit={onSubmit} className="form-stack">
             <div className="form-group">
@@ -344,7 +373,7 @@ export default function Evaluate() {
             {error && <p className="form-error">{error}</p>}
 
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? "Считаю..." : "Оценить"}
+              {loading ? t("common.loading") : t("nav.evaluate")}
             </button>
           </form>
         </section>
@@ -352,29 +381,14 @@ export default function Evaluate() {
         {result && (
           <section className="glass-panel" style={{ marginTop: 20 }}>
             <div>
-              <strong>Цена:</strong> {Math.round(result.predicted_price).toLocaleString()} ₸
+              <strong>{t("evaluate.resultPrice")}:</strong> {Math.round(result.predicted_price).toLocaleString()} ₸
             </div>
             <div>
-              <strong>Цена за м²:</strong>{" "}
+              <strong>{t("evaluate.resultPricePerM2")}:</strong>{" "}
               {Math.round(result.predicted_price / form.area).toLocaleString()} ₸
             </div>
 
-            {marketIndex7 && typeof marketIndex7.normalizedIndex === "number" && (
-              <div style={{ marginTop: 12 }}>
-                <strong>Adjusted price (по новостям):</strong>{" "}
-                {(() => {
-                  const basePrice = Number(result.predicted_price);
-                  const alpha = 0.03;
-                  const kRaw = marketIndex7.normalizedIndex / 100;
-                  const k = Math.max(-1, Math.min(1, kRaw));
-                  const adjusted = basePrice * (1 + alpha * k);
-                  return `${Math.round(adjusted).toLocaleString()} ₸`;
-                })()}
-                <div style={{ color: "var(--color-text-muted)" }}>
-                  Формула: adjusted = base × (1 + 0.03 × clamp(index/100, -1, +1))
-                </div>
-              </div>
-            )}
+            <EvaluationForecast forecast={result.forecast} />
           </section>
         )}
       </main>

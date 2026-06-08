@@ -50,6 +50,12 @@ ml/model/*.joblib
 ml/model/*.pkl
 ml/model/*.onnx
 
+# Machine Learning Data & Models
+ml/data/*.csv
+*.cbm
+*.joblib
+ml/notebooks/catboost_info/
+
 # mongo memory server cache
 backend/node_modules/.cache/mongodb-memory-server/
 **/.cache/mongodb-memory-server/

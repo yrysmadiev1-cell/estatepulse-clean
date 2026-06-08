@@ -5,9 +5,11 @@ import SiteHeader from "./SiteHeader";
 import SiteFooter from "./SiteFooter";
 import { registerUser } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
+import { useUi } from "../context/UiContext";
 
 function Register() {
   const { token, user, login } = useAuth();
+  const { t } = useUi();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +28,7 @@ function Register() {
       if (result?.user && result?.token) {
         login({ user: result.user, token: result.token });
       }
-      setSuccess(`Пользователь ${email} создан`);
+      setSuccess(t("register.created", { email }));
       setName("");
       setEmail("");
       setPassword("");
@@ -39,20 +41,20 @@ function Register() {
 
   return (
     <div className="page-shell">
-      <SiteHeader actionLabel="На главную" actionTo="/" />
+      <SiteHeader actionLabel={t("common.home")} actionTo="/" />
       <main className="container narrow">
         <section className="form-panel glass-panel">
-          <p className="eyebrow">Создаём доступ</p>
-          <h1 className="post-title">Регистрация</h1>
+          <p className="eyebrow">{t("register.eyebrow")}</p>
+          <h1 className="post-title">{t("register.title")}</h1>
           {isAdmin ? (
-            <p className="form-lead">Вы вошли как администратор. При необходимости создайте доступ коллегам.</p>
+            <p className="form-lead">{t("register.leadAdmin")}</p>
           ) : (
-            <p className="form-lead">Заполните форму, чтобы создать личный аккаунт. Роль назначается как читатель.</p>
+            <p className="form-lead">{t("register.leadUser")}</p>
           )}
 
           <form className="form-stack" onSubmit={handleSubmit}>
             <div className="form-group">
-              <label htmlFor="register-name">Имя</label>
+              <label htmlFor="register-name">{t("register.name")}</label>
               <input
                 id="register-name"
                 type="text"
@@ -64,7 +66,7 @@ function Register() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="register-email">Email</label>
+              <label htmlFor="register-email">{t("register.email")}</label>
               <input
                 id="register-email"
                 type="email"
@@ -76,7 +78,7 @@ function Register() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="register-password">Пароль</label>
+              <label htmlFor="register-password">{t("register.password")}</label>
               <input
                 id="register-password"
                 type="password"
@@ -92,12 +94,12 @@ function Register() {
             {success && <p className="success-note">{success}</p>}
 
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? "Создаём аккаунт..." : "Зарегистрировать пользователя"}
+              {loading ? t("register.loading") : t("register.button")}
             </button>
           </form>
 
           <p className="hero-description">
-            Уже есть доступ? <Link to="/login">Войдите</Link>.
+            {t("register.haveAccount")} <Link to="/login">{t("register.login")}</Link>.
           </p>
         </section>
       </main>

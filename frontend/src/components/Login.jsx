@@ -5,10 +5,12 @@ import SiteHeader from "./SiteHeader";
 import SiteFooter from "./SiteFooter";
 import { loginUser } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
+import { useUi } from "../context/UiContext";
 
 function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const { t } = useUi();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -31,16 +33,16 @@ function Login() {
 
   return (
     <div className="page-shell">
-      <SiteHeader actionLabel="На главную" actionTo="/" />
+      <SiteHeader actionLabel={t("common.home")} actionTo="/" />
       <main className="container narrow">
         <section className="form-panel glass-panel">
-          <p className="eyebrow">Добро пожаловать</p>
-          <h1 className="post-title">Войти в аккаунт</h1>
-          <p className="form-lead">Используйте email и пароль, чтобы управлять публикациями и аналитикой.</p>
+          <p className="eyebrow">{t("login.eyebrow")}</p>
+          <h1 className="post-title">{t("login.title")}</h1>
+          <p className="form-lead">{t("login.lead")}</p>
 
           <form className="form-stack" onSubmit={handleSubmit}>
             <div className="form-group">
-              <label htmlFor="login-email">Email</label>
+              <label htmlFor="login-email">{t("login.email")}</label>
               <input
                 id="login-email"
                 type="email"
@@ -52,7 +54,7 @@ function Login() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="login-password">Пароль</label>
+              <label htmlFor="login-password">{t("login.password")}</label>
               <input
                 id="login-password"
                 type="password"
@@ -66,12 +68,12 @@ function Login() {
             {error && <p className="form-error">{error}</p>}
 
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? "Входим..." : "Войти"}
+              {loading ? t("login.loading") : t("login.button")}
             </button>
           </form>
 
           <p className="hero-description">
-            Нет аккаунта? <Link to="/register">Зарегистрируйтесь</Link>.
+            {t("login.noAccount")} <Link to="/register">{t("login.register")}</Link>.
           </p>
         </section>
       </main>

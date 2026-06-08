@@ -54,6 +54,53 @@ function getThemeColors() {
   };
 }
 
+const EARTH_RADIUS_M = 6378137;
+
+function degreesToRadians(deg) {
+  return (deg * Math.PI) / 180;
+}
+
+function ringArea(coords) {
+  let area = 0;
+  const len = coords.length;
+  if (len < 3) return 0;
+  for (let i = 0; i < len; i += 1) {
+    const [lon1, lat1] = coords[i];
+    const [lon2, lat2] = coords[(i + 1) % len];
+    area += (degreesToRadians(lon2) - degreesToRadians(lon1)) *
+      (2 + Math.sin(degreesToRadians(lat1)) + Math.sin(degreesToRadians(lat2)));
+  }
+  return (area * EARTH_RADIUS_M * EARTH_RADIUS_M) / 2;
+}
+
+function polygonArea(rings) {
+  if (!Array.isArray(rings) || rings.length === 0) return 0;
+  let area = Math.abs(ringArea(rings[0]));
+  for (let i = 1; i < rings.length; i += 1) {
+    area -= Math.abs(ringArea(rings[i]));
+  }
+  return Math.max(0, area);
+}
+
+function geoJsonArea(geometry) {
+  if (!geometry) return 0;
+  if (geometry.type === "Polygon") {
+    return polygonArea(geometry.coordinates);
+  }
+  if (geometry.type === "MultiPolygon") {
+    return geometry.coordinates.reduce((sum, rings) => sum + polygonArea(rings), 0);
+  }
+  return 0;
+}
+
+function featureAreaSqm(feature) {
+  return geoJsonArea(feature?.geometry);
+}
+
+function sqmToHa(areaSqm) {
+  return areaSqm / 10000;
+}
+
 const CITY_CONFIG = {
   "Астана": {
     center: [51.1282, 71.4304],
@@ -175,11 +222,38 @@ const ALMATY_INDEX_BY_DISTRICT = {
   "Турксибский": 2958,
 };
 
+const ALMATY_DISTRICT_NAMES = [
+  "Алатауский район",
+  "Алмалинский район",
+  "Ауэзовский район",
+  "Бостандыкский район",
+  "Жетысуский район",
+  "Медеуский район",
+  "Наурызбайский район",
+  "Турксибский район",
+];
+
+const ASTANA_DISTRICT_NAMES = [
+  "Алматы район",
+  "Байконур район",
+  "Байқоңыр район",
+  "Есиль район",
+  "Есильский район",
+  "Нура район",
+  "Нұра аудан",
+  "Сарайшык район",
+  "Сарыарка район",
+];
+
 function normalizeDistrictName(name) {
   const raw = (name || "").trim();
   if (!raw) return null;
-  // From OSM we usually get "<Name> район".
-  const stripped = raw.replace(/\s+район\s*$/iu, "").trim();
+  const stripped = raw
+    .replace(/^р-?н\s+/iu, "")
+    .replace(/\s+р-?н$/iu, "")
+    .replace(/\s+район\s*$/iu, "")
+    .replace(/\s+аудан(ы)?\s*$/iu, "")
+    .trim();
   return stripped || raw;
 }
 
@@ -206,24 +280,40 @@ const OVERPASS_URLS = [
   "https://overpass.openstreetmap.ru/api/interpreter",
 ];
 
-const ALMATY_BBOX = {
-  // Rough bbox around Almaty city; used to avoid ambiguous area("Алматы") matches.
-  south: 43.05,
-  west: 76.65,
-  north: 43.40,
-  east: 77.15,
+const GEOJSON_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+const CITY_DISTRICT_SOURCES = {
+  Алматы: {
+    bbox: {
+      south: 43.05,
+      west: 76.65,
+      north: 43.40,
+      east: 77.15,
+    },
+    districtNames: ALMATY_DISTRICT_NAMES,
+    indexByDistrict: ALMATY_INDEX_BY_DISTRICT,
+    cacheKey: "estatepulse:almatyDistrictsGeoJson:v3",
+  },
+  Астана: {
+    bbox: {
+      south: 51.00,
+      west: 71.20,
+      north: 51.30,
+      east: 71.70,
+    },
+    districtNames: ASTANA_DISTRICT_NAMES,
+    indexByDistrict: null,
+    cacheKey: "estatepulse:astanaDistrictsGeoJson:v2",
+  },
 };
 
-const ALMATY_GEOJSON_CACHE_KEY = "estatepulse:almatyDistrictsGeoJson:v1";
-const ALMATY_GEOJSON_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-
-function loadAlmatyGeoJsonFromCache() {
+function loadGeoJsonFromCache(cacheKey) {
   try {
-    const raw = localStorage.getItem(ALMATY_GEOJSON_CACHE_KEY);
+    const raw = localStorage.getItem(cacheKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed?.ts || !parsed?.geojson) return null;
-    if (Date.now() - parsed.ts > ALMATY_GEOJSON_CACHE_TTL_MS) return null;
+    if (Date.now() - parsed.ts > GEOJSON_CACHE_TTL_MS) return null;
     if (parsed.geojson.type !== "FeatureCollection") return null;
     if (!Array.isArray(parsed.geojson.features) || parsed.geojson.features.length === 0) return null;
     return parsed.geojson;
@@ -232,15 +322,28 @@ function loadAlmatyGeoJsonFromCache() {
   }
 }
 
-function saveAlmatyGeoJsonToCache(geojson) {
+function saveGeoJsonToCache(cacheKey, geojson) {
   try {
-    localStorage.setItem(
-      ALMATY_GEOJSON_CACHE_KEY,
-      JSON.stringify({ ts: Date.now(), geojson })
-    );
+    localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), geojson }));
   } catch {
     // ignore
   }
+}
+
+function buildDistrictQuery(districtNames, bbox) {
+  const unique = Array.from(new Set(districtNames)).filter(Boolean);
+  const lines = unique.map(
+    (name) => `  relation["boundary"="administrative"]["name"="${name}"](${bbox});`
+  );
+  return `
+[out:json][timeout:25];
+(
+${lines.join("\n")}
+);
+out body;
+>;
+out skel qt;
+`.trim();
 }
 
 async function fetchOverpassJson(query) {
@@ -267,40 +370,38 @@ async function fetchOverpassJson(query) {
   throw lastError || new Error("Overpass request failed");
 }
 
-async function fetchAlmatyDistrictsGeoJson() {
-  const cached = loadAlmatyGeoJsonFromCache();
-  if (cached) return cached;
+async function fetchOverpassJsonViaBackend(cityName) {
+  const resp = await fetch(`/api/map/districts?city=${encodeURIComponent(cityName)}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!resp.ok) {
+    throw new Error(`Backend map proxy error: HTTP ${resp.status}`);
+  }
+  return resp.json();
+}
 
-  // Fetch the 8 district relations inside a bbox around the city.
-  const bbox = `${ALMATY_BBOX.south},${ALMATY_BBOX.west},${ALMATY_BBOX.north},${ALMATY_BBOX.east}`;
-  const query = `
-[out:json][timeout:25];
-(
-  relation["boundary"="administrative"]["name"="Алатауский район"](${bbox});
-  relation["boundary"="administrative"]["name"="Алмалинский район"](${bbox});
-  relation["boundary"="administrative"]["name"="Ауэзовский район"](${bbox});
-  relation["boundary"="administrative"]["name"="Бостандыкский район"](${bbox});
-  relation["boundary"="administrative"]["name"="Жетысуский район"](${bbox});
-  relation["boundary"="administrative"]["name"="Медеуский район"](${bbox});
-  relation["boundary"="administrative"]["name"="Наурызбайский район"](${bbox});
-  relation["boundary"="administrative"]["name"="Турксибский район"](${bbox});
-);
-out body;
->;
-out skel qt;
-`.trim();
-
-  const overpassJson = await fetchOverpassJson(query);
-  const geojson = osmtogeojson(overpassJson);
-  const features = (geojson?.features || [])
+function buildDistrictFeatureCollection(geojson, source) {
+  const allowed = source?.districtNames
+    ? new Set(source.districtNames.map((name) => normalizeDistrictName(name)).filter(Boolean))
+    : null;
+  const byName = new Map();
+  (geojson?.features || [])
     .filter((f) => f?.geometry)
-    .map((f) => {
+    .forEach((f) => {
       const name = f.properties?.name;
       const normalized = normalizeDistrictName(name);
-      const index = normalized ? ALMATY_INDEX_BY_DISTRICT[normalized] : undefined;
+      if (allowed && normalized && !allowed.has(normalized)) return;
+      const index = source.indexByDistrict && normalized
+        ? source.indexByDistrict[normalized]
+        : undefined;
       const trend = trendFromIndex(index);
       const avgPricePerM2 = demoPriceFromIndex(index);
-      return {
+      const areaSqm = featureAreaSqm(f);
+      const areaHa = Number.isFinite(areaSqm)
+        ? Math.round(sqmToHa(areaSqm) * 100) / 100
+        : undefined;
+
+      const feature = {
         ...f,
         properties: {
           ...f.properties,
@@ -308,16 +409,46 @@ out skel qt;
           index,
           trend,
           avgPricePerM2,
+          areaHa,
         },
       };
+
+      const key = feature.properties?.districtName;
+      if (!key) return;
+      const prev = byName.get(key);
+      if (!prev || (feature.properties?.areaHa || 0) > (prev.properties?.areaHa || 0)) {
+        byName.set(key, feature);
+      }
     });
 
+  const features = Array.from(byName.values());
   if (!features.length) {
-    throw new Error("No district geometries returned for Almaty");
+    throw new Error("No district geometries returned");
   }
 
-  const fc = { type: "FeatureCollection", features };
-  saveAlmatyGeoJsonToCache(fc);
+  return { type: "FeatureCollection", features };
+}
+
+async function fetchCityDistrictsGeoJson(cityName) {
+  const source = CITY_DISTRICT_SOURCES[cityName];
+  if (!source) throw new Error(`No district source for ${cityName}`);
+
+  const cached = loadGeoJsonFromCache(source.cacheKey);
+  if (cached) return cached;
+
+  const bbox = `${source.bbox.south},${source.bbox.west},${source.bbox.north},${source.bbox.east}`;
+  const query = buildDistrictQuery(source.districtNames, bbox);
+
+  let overpassJson;
+  try {
+    overpassJson = await fetchOverpassJson(query);
+  } catch (err) {
+    overpassJson = await fetchOverpassJsonViaBackend(cityName);
+  }
+
+  const geojson = osmtogeojson(overpassJson);
+  const fc = buildDistrictFeatureCollection(geojson, source);
+  saveGeoJsonToCache(source.cacheKey, fc);
   return fc;
 }
 
@@ -527,28 +658,33 @@ export default function MapPage() {
 
     (async () => {
       if (isOverview) return;
-      if (city === "Алматы") {
+      if (city === "Алматы" || city === "Астана") {
         try {
-          const geo = await fetchAlmatyDistrictsGeoJson();
+          const geo = await fetchCityDistrictsGeoJson(city);
           renderGeoJson(geo);
         } catch (e) {
-          // Fallback: keep the map usable even if Overpass is blocked/unavailable.
-          renderPolygons([
-            {
-              id: "almaty-demo-1",
-              name: "Алмалинский",
-              index: ALMATY_INDEX_BY_DISTRICT["Алмалинский"],
-              trend: trendFromIndex(ALMATY_INDEX_BY_DISTRICT["Алмалинский"]),
-              avgPricePerM2: demoPriceFromIndex(ALMATY_INDEX_BY_DISTRICT["Алмалинский"]),
-              polygon: [
-                [43.27, 76.90],
-                [43.27, 76.96],
-                [43.23, 76.96],
-                [43.23, 76.90],
-              ],
-            },
-          ]);
-          console.warn("Не удалось загрузить границы районов Алматы из OSM/Overpass:", e);
+          const fallbackDistricts = city === "Алматы"
+            ? [
+                {
+                  id: "almaty-demo-1",
+                  name: "Алмалинский",
+                  index: ALMATY_INDEX_BY_DISTRICT["Алмалинский"],
+                  trend: trendFromIndex(ALMATY_INDEX_BY_DISTRICT["Алмалинский"]),
+                  avgPricePerM2: demoPriceFromIndex(ALMATY_INDEX_BY_DISTRICT["Алмалинский"]),
+                  polygon: [
+                    [43.27, 76.90],
+                    [43.27, 76.96],
+                    [43.23, 76.96],
+                    [43.23, 76.90],
+                  ],
+                },
+              ]
+            : config.districts;
+
+          if (fallbackDistricts?.length) {
+            renderPolygons(fallbackDistricts);
+          }
+          console.warn("Не удалось загрузить границы районов из OSM/Overpass:", e);
         }
         return;
       }

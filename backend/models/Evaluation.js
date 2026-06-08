@@ -23,6 +23,8 @@ const evaluationSchema = new mongoose.Schema(
 
     predicted_price: { type: Number, required: true },
     price_per_m2: { type: Number, required: true },
+    news_snapshot: { type: mongoose.Schema.Types.Mixed, default: null },
+    forecast: { type: mongoose.Schema.Types.Mixed, default: null },
 
     createdAt: { type: Date, default: Date.now, index: true },
   },

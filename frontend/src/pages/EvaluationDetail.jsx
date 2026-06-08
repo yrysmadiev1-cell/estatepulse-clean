@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import "../components/style.css";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
+import EvaluationForecast from "../components/EvaluationForecast";
 import { useAuth } from "../context/AuthContext";
 
 const formatPrice = (value) =>
@@ -79,6 +80,8 @@ export default function EvaluationDetail() {
                   <strong>{formatPrice(item.price_per_m2)} ₸</strong>
                 </div>
               </div>
+
+              <EvaluationForecast forecast={item.forecast} />
 
               <div className="profile-card" style={{ marginTop: 20 }}>
                 <h2 className="section-title">Параметры объекта</h2>

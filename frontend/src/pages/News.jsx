@@ -6,6 +6,7 @@ import SiteFooter from "../components/SiteFooter";
 import LoadingScreen from "../components/LoadingScreen";
 import { getPosts } from "../utils/api";
 import { useSearch } from "../hooks/useSearch";
+import { useUi } from "../context/UiContext";
 
 function formatDate(value) {
   if (!value) return "Дата уточняется";
@@ -19,6 +20,7 @@ function formatDate(value) {
 }
 
 export default function News() {
+  const { t } = useUi();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -69,11 +71,11 @@ export default function News() {
   const isSearching = Boolean(trimmedQuery);
 
   const emptyStateMessage = isSearching
-    ? `По запросу "${trimmedQuery}" ничего не найдено.`
-    : "Новостей пока нет. Они появятся после следующего авто-сбора.";
+    ? t("news.emptySearch", { query: trimmedQuery })
+    : t("news.emptyDefault");
 
   if (loading) {
-    return <LoadingScreen actionLabel="На главную" actionTo="/" container="wide" />;
+    return <LoadingScreen actionLabel={t("common.home")} actionTo="/" container="wide" />;
   }
 
   if (error) {
@@ -88,13 +90,13 @@ export default function News() {
         <section className="search-panel glass-panel">
           <header>
             <div>
-              <p className="eyebrow">Новости</p>
-              <h1>Поиск по заголовку</h1>
+              <p className="eyebrow">{t("news.eyebrow")}</p>
+              <h1>{t("news.title")}</h1>
             </div>
-            <span className="filter-hint">Введите ключевые слова из заголовка</span>
+            <span className="filter-hint">{t("news.searchHint")}</span>
           </header>
 
-          <label className="search-label" htmlFor="news-search">Поиск</label>
+          <label className="search-label" htmlFor="news-search">{t("news.searchLabel")}</label>
           <div className="search-control">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M15.5 14h-.79l-.28-.27a6 6 0 1 0-.7.7l.27.28v.79l4.5 4.5 1.49-1.49zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z" />
@@ -104,7 +106,7 @@ export default function News() {
               type="search"
               value={query}
               onChange={handleChange}
-              placeholder="Например, базовая ставка"
+              placeholder={t("news.searchPlaceholder")}
             />
           </div>
         </section>
@@ -112,20 +114,20 @@ export default function News() {
         <section className="filters-panel glass-panel">
           <header>
             <div>
-              <p className="eyebrow">Фильтры</p>
-              <h2>Уточните выдачу</h2>
+              <p className="eyebrow">{t("news.filtersEyebrow")}</p>
+              <h2>{t("news.filtersTitle")}</h2>
             </div>
-            <span className="filter-hint">Город, категория, период, источник</span>
+            <span className="filter-hint">{t("news.filtersHint")}</span>
           </header>
 
           <div className="filters-controls">
             <label className="filters-toggle">
               <input type="checkbox" checked={onlyAI} onChange={(e) => setOnlyAI(e.target.checked)} />
-              Только AI новости
+              {t("news.onlyAi")}
             </label>
 
             <select className="form-control filters-select" value={city} onChange={(e) => setCity(e.target.value)}>
-              <option value="">Все города</option>
+              <option value="">{t("news.allCities")}</option>
               <option value="Алматы">Алматы</option>
               <option value="Астана">Астана</option>
               <option value="Шымкент">Шымкент</option>
@@ -136,7 +138,7 @@ export default function News() {
               value={category}
               onChange={(e) => setCategory(e.target.value)}
             >
-              <option value="">Все категории</option>
+              <option value="">{t("news.allCategories")}</option>
               <option value="Экономика">Экономика</option>
               <option value="Финансы">Финансы</option>
               <option value="Недвижимость">Недвижимость</option>
@@ -144,7 +146,7 @@ export default function News() {
             </select>
 
             <select className="form-control filters-select" value={days} onChange={(e) => setDays(e.target.value)}>
-              <option value="">За всё время</option>
+              <option value="">{t("news.allPeriods")}</option>
               <option value="7">За 7 дней</option>
               <option value="30">За 30 дней</option>
               <option value="90">За 90 дней</option>
@@ -155,7 +157,7 @@ export default function News() {
               value={sourceName}
               onChange={(e) => setSourceName(e.target.value)}
             >
-              <option value="">Все источники</option>
+              <option value="">{t("news.allSources")}</option>
               <option value="Kapital.kz">Kapital.kz</option>
             </select>
 
@@ -170,7 +172,7 @@ export default function News() {
                 setOnlyAI(false);
               }}
             >
-              Сброс
+              {t("news.reset")}
             </button>
           </div>
         </section>
@@ -180,7 +182,7 @@ export default function News() {
 
           {filtered.map((post, index) => {
             const postId = post.id ?? post._id ?? index;
-            const segment = post.category || "Аналитика";
+            const segment = post.category || t("news.allCategories");
             const impactDirection =
               post.impactDirection === "up" || post.impactDirection === "down" || post.impactDirection === "neutral"
                 ? post.impactDirection
@@ -218,7 +220,7 @@ export default function News() {
 
                 <footer className="post-card__footer">
                   <time dateTime={post.date}>{formatDate(post.date)}</time>
-                  <span className="post-card__cta">Читать →</span>
+                  <span className="post-card__cta">{t("news.readMore")}</span>
                 </footer>
               </article>
             );

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import SiteHeader from "./SiteHeader";
 import SiteFooter from "./SiteFooter";
 import MarketDashboard from "./MarketDashboard";
+import { useUi } from "../context/UiContext";
 
 const MARKET_METRICS = [
   {
@@ -44,10 +45,11 @@ const TICKER_HEADLINES = [
 ];
 
 function Home({ cityName = null }) {
-  const heroTitle = cityName ? `Рынок ${cityName}: дашборд` : "Дашборд рынка недвижимости";
+  const { t } = useUi();
+  const heroTitle = cityName ? t("home.heroTitleCity", { city: cityName }) : t("home.heroTitleDefault");
   const heroLead = cityName
-    ? `Ключевые индикаторы и динамика новостного индекса для ${cityName}.`
-    : "Ключевые индикаторы и динамика новостного индекса по городам.";
+    ? t("home.heroLeadCity", { city: cityName })
+    : t("home.heroLeadDefault");
 
   const formatDate = (value) => {
     if (!value) return "Дата уточняется";
@@ -62,13 +64,13 @@ function Home({ cityName = null }) {
 
   return (
     <div className="page-shell">
-      <SiteHeader actionLabel="Опубликовать прогноз" actionTo="/posts/new" />
+      <SiteHeader actionLabel={t("common.home")} actionTo="/posts/new" />
 
       <main className="container wide main-grid">
         <section className="hero-panel glass-panel">
           <div className="hero-copy">
             <p className="eyebrow">
-              Обновление {cityName ? `// ${cityName}` : "// Казахстан"} · {formatDate(new Date().toISOString())}
+              {t("home.heroBadge")} {cityName ? `// ${cityName}` : "// Казахстан"} · {formatDate(new Date().toISOString())}
             </p>
             <h1>{heroTitle}</h1>
             <p className="hero-description">{heroLead}</p>
@@ -94,16 +96,14 @@ function Home({ cityName = null }) {
             </div>
 
             <div className="hero-actions">
-              <Link to="/news" className="btn btn-primary">Открыть новости</Link>
+              <Link to="/news" className="btn btn-primary">{t("home.openNews")}</Link>
             </div>
           </div>
 
           <div className="hero-feature">
-            <p className="hero-feature-label">Новости</p>
-            <p>
-              Все новости и поиск по заголовку перенесены на отдельную страницу.
-            </p>
-            <Link to="/news" className="hero-link">Перейти к новостям →</Link>
+            <p className="hero-feature-label">{t("home.newsFeatureLabel")}</p>
+            <p>{t("home.newsFeatureText")}</p>
+            <Link to="/news" className="hero-link">{t("home.newsLink")}</Link>
           </div>
         </section>
 
@@ -119,7 +119,7 @@ function Home({ cityName = null }) {
         </section>
 
         <section className="insights-ticker glass-panel">
-          <span className="ticker-label">Лента дня</span>
+          <span className="ticker-label">{t("home.tickerLabel")}</span>
           <div className="ticker-track">
             {TICKER_HEADLINES.map((headline) => (
               <p key={headline}>{headline}</p>

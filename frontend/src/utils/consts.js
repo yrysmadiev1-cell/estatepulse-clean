@@ -8,6 +8,7 @@ export const LOGIN_ROUTE = "/login";
 export const REGISTER_ROUTE = "/register";
 export const ABOUT_ROUTE = "/about";
 export const NEWS_ROUTE = "/news";
+export const SUPPORT_ROUTE = "/support";
 export const EVALUATE_ROUTE = "/evaluate";
 export const MAP_ROUTE = "/map";
 export const HISTORY_ROUTE = "/history";
@@ -26,6 +27,7 @@ const consts = {
   REGISTER_ROUTE,
   ABOUT_ROUTE,
   NEWS_ROUTE,
+  SUPPORT_ROUTE,
   EVALUATE_ROUTE,
   MAP_ROUTE,
   HISTORY_ROUTE,

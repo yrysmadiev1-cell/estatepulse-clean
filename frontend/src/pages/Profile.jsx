@@ -4,6 +4,7 @@ import "../components/style.css";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
 import { useAuth } from "../context/AuthContext";
+import { useUi } from "../context/UiContext";
 
 const formatPrice = (value) =>
   Number.isFinite(value) ? new Intl.NumberFormat("ru-RU").format(Math.round(value)) : "—";
@@ -16,6 +17,7 @@ const formatDate = (value) => {
 
 export default function Profile() {
   const { user, token } = useAuth();
+  const { t } = useUi();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -49,62 +51,62 @@ export default function Profile() {
       <SiteHeader actionLabel={null} actionTo={null} />
       <main className="container wide">
         <section className="glass-panel">
-          <p className="eyebrow">Личный кабинет</p>
-          <h1 className="post-title">Профиль</h1>
+          <p className="eyebrow">{t("profile.eyebrow")}</p>
+          <h1 className="post-title">{t("profile.title")}</h1>
 
           {!token ? (
             <div className="profile-empty">
               <p className="hero-description">
-                Войдите в аккаунт, чтобы сохранять оценки и видеть историю.
+                {t("profile.authDescription")}
               </p>
               <div className="history-actions">
                 <Link to="/login" className="btn btn-primary">
-                  Войти
+                  {t("profile.login")}
                 </Link>
                 <Link to="/register" className="btn btn-secondary">
-                  Регистрация
+                  {t("profile.register")}
                 </Link>
               </div>
             </div>
           ) : (
             <div className="profile-grid">
               <div>
-                <h2 className="section-title">Данные аккаунта</h2>
+                <h2 className="section-title">{t("profile.accountData")}</h2>
                 <div className="profile-card">
                   <div>
-                    <p className="profile-label">Имя</p>
+                    <p className="profile-label">{t("profile.name")}</p>
                     <p className="profile-value">{user?.name || "—"}</p>
                   </div>
                   <div>
-                    <p className="profile-label">Email</p>
+                    <p className="profile-label">{t("profile.email")}</p>
                     <p className="profile-value">{user?.email || "—"}</p>
                   </div>
 
                   <div>
-                    <p className="profile-label">Подписка</p>
-                    <p className="profile-value">Base</p>
+                    <p className="profile-label">{t("profile.subscription")}</p>
+                    <p className="profile-value">{t("profile.plan")}</p>
                     <div className="history-actions" style={{ marginTop: 10 }}>
                       <Link to="/plans" className="btn btn-secondary">
-                        Планы
+                        {t("profile.plans")}
                       </Link>
                     </div>
                   </div>
 
                   <div className="article-pills">
-                    <span className="badge">Авторизован</span>
-                    {user?.role === "admin" && <span className="badge badge-city">Админ</span>}
+                    <span className="badge">{t("profile.authorized")}</span>
+                    {user?.role === "admin" && <span className="badge badge-city">{t("profile.adminBadge")}</span>}
                   </div>
                 </div>
               </div>
 
               <div>
-                <h2 className="section-title">История оценок</h2>
+                <h2 className="section-title">{t("profile.historyTitle")}</h2>
                 {loading ? (
-                  <div className="profile-card">Загрузка...</div>
+                  <div className="profile-card">{t("profile.loading")}</div>
                 ) : err ? (
                   <div className="profile-card form-error">{err}</div>
                 ) : !hasHistory ? (
-                  <div className="profile-card">Пока нет сохранённых оценок.</div>
+                  <div className="profile-card">{t("profile.noHistory")}</div>
                 ) : (
                   <div className="profile-card">
                     <div className="table-scroll">
@@ -138,7 +140,7 @@ export default function Profile() {
                               <td>{formatPrice(x.price_per_m2)} ₸</td>
                               <td>
                                 <Link to={`/history/${x._id}`} className="btn btn-secondary">
-                                  Открыть оценку
+                                  {t("profile.openEvaluation")}
                                 </Link>
                               </td>
                             </tr>

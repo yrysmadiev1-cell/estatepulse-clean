@@ -1,6 +1,7 @@
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const POSTS_URL = `${API_BASE_URL}/posts`;
 const AUTH_URL = `${API_BASE_URL}/api`;
+const SUPPORT_URL = `${API_BASE_URL}/api/support`;
 
 async function request(url, options = {}) {
   const res = await fetch(url, options);
@@ -82,6 +83,18 @@ export function deletePost(id, token) {
   });
 }
 
+export function getPostComments(id) {
+  return request(`${POSTS_URL}/${id}/comments`);
+}
+
+export function addPostComment(id, payload, token) {
+  return request(`${POSTS_URL}/${id}/comments`, {
+    method: "POST",
+    headers: buildHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
 export function registerUser(payload, token) {
   return request(`${AUTH_URL}/register`, {
     method: "POST",
@@ -98,14 +111,57 @@ export function loginUser(payload) {
   });
 }
 
+export function getSupportThreads(token) {
+  return request(`${SUPPORT_URL}/threads`, {
+    headers: buildHeaders(token),
+  });
+}
+
+export function getSupportThread(id, token) {
+  return request(`${SUPPORT_URL}/threads/${id}`, {
+    headers: buildHeaders(token),
+  });
+}
+
+export function createSupportThread(payload, token) {
+  return request(`${SUPPORT_URL}/threads`, {
+    method: "POST",
+    headers: buildHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function sendSupportMessage(id, payload, token) {
+  return request(`${SUPPORT_URL}/threads/${id}/messages`, {
+    method: "POST",
+    headers: buildHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function setSupportThreadStatus(id, payload, token) {
+  return request(`${SUPPORT_URL}/threads/${id}/status`, {
+    method: "PATCH",
+    headers: buildHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
 const api = {
   getPosts,
   getPost,
   createPost,
   updatePost,
   deletePost,
+  getPostComments,
+  addPostComment,
   registerUser,
   loginUser,
+  getSupportThreads,
+  getSupportThread,
+  createSupportThread,
+  sendSupportMessage,
+  setSupportThreadStatus,
 };
 
 export default api;

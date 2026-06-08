@@ -9,6 +9,7 @@ import Register from "../components/Register";
 import CityFeed from "../components/CityFeed";
 import About from "../components/About";
 import News from "../pages/News";
+import Support from "../pages/Support";
 import Evaluate from "../pages/Evaluate";
 import MapPage from "../pages/Map";
 import History from "../pages/History";
@@ -28,6 +29,7 @@ import {
   REGISTER_ROUTE,
   ABOUT_ROUTE,
   NEWS_ROUTE,
+  SUPPORT_ROUTE,
   EVALUATE_ROUTE,
   MAP_ROUTE,
   HISTORY_ROUTE,
@@ -39,6 +41,7 @@ import {
 export const routes = [
   { path: HOME_ROUTE, element: <Home /> },
   { path: NEWS_ROUTE, element: <News /> },
+  { path: SUPPORT_ROUTE, element: <ProtectedRoute><Support /></ProtectedRoute> },
   {
     path: NEW_POST_ROUTE,
     element: (

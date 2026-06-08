@@ -6,17 +6,54 @@ from typing import List, Optional
 import joblib
 import pandas as pd
 import os
+from openai import OpenAI
+from datetime import datetime
+
+def load_env_file() -> None:
+    candidates = [
+        os.path.join(os.path.dirname(__file__), ".env"),
+        os.path.join(os.getcwd(), ".env"),
+    ]
+    for path in candidates:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                for line in handle:
+                    raw = line.strip()
+                    if not raw or raw.startswith("#") or "=" not in raw:
+                        continue
+                    key, value = raw.split("=", 1)
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+        except Exception:
+            pass
+
+load_env_file()
 
 app = FastAPI(title="EstatePulse ML & NLP Service")
 
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "model"))
+
+def get_groq_client() -> OpenAI:
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY is not set")
+    return OpenAI(base_url=GROQ_BASE_URL, api_key=api_key)
+
 # ===== ML: ЗАГРУЗКА МОДЕЛЕЙ =====
 # Пытаемся загрузить модели для обоих городов.
-# Убедись, что almaty_pipeline.joblib и astana_pipeline.joblib лежат в папке model!
+# Убедись, что almaty_pipeline_tuned.joblib и astana_pipeline_tuned.joblib лежат в папке model!
 almaty_pipeline = None
 astana_pipeline = None
 try:
-    almaty_pipeline = joblib.load("../model/almaty_pipeline.joblib")
-    astana_pipeline = joblib.load("../model/astana_pipeline.joblib")
+    almaty_pipeline = joblib.load(os.path.join(MODEL_DIR, "almaty_pipeline_tuned.joblib"))
+    astana_pipeline = joblib.load(os.path.join(MODEL_DIR, "astana_pipeline_tuned.joblib"))
     print("✅ ML Модели успешно загружены!")
 except Exception as e:
     print(f"⚠️ Ошибка загрузки моделей: {e}. Проверьте пути к файлам .joblib!")
@@ -59,7 +96,7 @@ def predict(req: PredictRequest):
         df = pd.DataFrame([
             {
                 "area": req.area,
-                "rooms": req.rooms,
+                "number_of_rooms": req.rooms,
                 "floor": req.floor,
                 "total_floors": req.total_floors,
                 "ceiling_height": req.ceiling_height,
@@ -125,6 +162,60 @@ CITY_MAP = {
     "нур-султан": "Астана",
     "шымкент": "Шымкент",
 }
+
+
+class ChatNewsItem(BaseModel):
+    title: str = ""
+    summary: Optional[str] = None
+    city: Optional[str] = None
+    source: Optional[str] = None
+    url: Optional[str] = None
+
+
+class ChatRequest(BaseModel):
+    user_query: str
+    context_news: List[ChatNewsItem] = []
+
+
+class ChatResponse(BaseModel):
+    answer: str
+
+
+def build_news_context(items: List[ChatNewsItem]) -> str:
+    lines = []
+    for idx, item in enumerate(items[:8], start=1):
+        title = (item.title or "").strip()
+        summary = (item.summary or "").strip()
+        city = (item.city or "").strip()
+        source = (item.source or "").strip()
+        url = (item.url or "").strip()
+
+        parts = [title]
+        if city:
+            parts.append(f"({city})")
+        if source:
+            parts.append(f"[{source}]")
+        if url:
+            parts.append(url)
+
+        line = " ".join([p for p in parts if p])
+        if summary:
+            line = f"{line} — {summary}" if line else summary
+
+        if line:
+            lines.append(f"{idx}. {line}")
+
+    return "\n".join(lines)
+
+def is_date_question(text: str) -> bool:
+    t = (text or "").lower()
+    patterns = ["какое сегодня число", "какая дата", "какое число", "сегодняшняя дата", "сегодня" ]
+    return any(p in t for p in patterns)
+
+def is_time_question(text: str) -> bool:
+    t = (text or "").lower()
+    patterns = ["сколько времени", "который час", "время", "сейчас времени"]
+    return any(p in t for p in patterns)
 
 KW_REAL_ESTATE = [
     "недвиж", "квартира", "жиль", "жк ", "жк.", "ипотек", "аренд", "застрой",
@@ -270,6 +361,51 @@ def compute_impact(category: str, tags: List[str], text: str) -> Impact:
         direction = "up" if pos_hits >= neg_hits else "down"
 
     return Impact(direction=direction, score=score, horizon=horizon, explanation=explanation)
+
+
+@app.post("/ai-assistant/chat", response_model=ChatResponse)
+def ai_chat(payload: ChatRequest):
+    user_query = (payload.user_query or "").strip()
+    if not user_query:
+        return {"answer": "Пустой запрос. Напишите вопрос."}
+
+    if is_date_question(user_query):
+        return {"answer": f"Сегодня {datetime.now().strftime('%d.%m.%Y')}."}
+    if is_time_question(user_query):
+        return {"answer": f"Сейчас {datetime.now().strftime('%H:%M')} (местное время сервера)."}
+
+    news_context = build_news_context(payload.context_news)
+    today = datetime.now().strftime("%Y-%m-%d")
+    system_prompt = (
+        "Ты — ИИ-ассистент платформы недвижимости EstatePulse (Казахстан). "
+        "Твоя цель: помогать пользователям с оценкой жилья и анализом рынка. "
+        "Отвечай кратко, профессионально, с легким оттенком уверенности. "
+        "Если спрашивают про ипотеку или цены в Астане/Алматы — используй свои знания о РК. "
+        f"Сегодня: {today}. "
+        "Если ссылаешься на новости, указывай ссылку из контекста. "
+        "Если в контексте нет точных данных — скажи, что данных нет и не придумывай числа."
+    )
+
+    if news_context:
+        system_prompt = f"{system_prompt}\n\nКонтекст последних новостей:\n{news_context}"
+
+    if not os.getenv("GROQ_API_KEY"):
+        return {"answer": "Ассистент не настроен: отсутствует GROQ_API_KEY."}
+
+    try:
+        client = get_groq_client()
+        completion = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_query},
+            ],
+            temperature=0.7,
+        )
+        answer = completion.choices[0].message.content
+        return {"answer": answer}
+    except Exception:
+        return {"answer": "Не удалось получить ответ от ассистента. Попробуйте позже."}
 
 @app.post("/nlp/analyze-article", response_model=NLPResponse)
 def nlp_analyze_article(req: NLPRequest):

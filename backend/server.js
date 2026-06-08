@@ -4,12 +4,17 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const cron = require("node-cron");
+const path = require("path");
+const { spawn } = require("child_process");
 const Evaluation = require("./models/Evaluation");
 const newsRoutes = require("./routes/news");
 const newsIndexRoutes = require("./routes/newsIndex");
 const newsTrendRoutes = require("./routes/newsTrend");
 const newsHeatmapRoutes = require("./routes/newsHeatmap");
 const newsCollectRoutes = require("./routes/newsCollect");
+const mapRoutes = require("./routes/map");
+const aiAssistantRoutes = require("./routes/aiAssistant");
+const supportRoutes = require("./routes/support");
 const { runCollectKapitalJob } = require("./jobs/collectKapitalJob");
 require("dotenv").config();
 
@@ -23,6 +28,15 @@ const ADMIN_NAME = process.env.ADMIN_NAME || "admin";
 const CITY_OPTIONS = ["Алматы", "Астана", "Шымкент"];
 const isValidCity = (value) => CITY_OPTIONS.includes(value);
 
+const TOXICITY_ENABLED = process.env.TOXICITY_ENABLED !== "false";
+const TOXICITY_PYTHON = process.env.TOXICITY_PYTHON || "python";
+const TOXICITY_MODEL_PATH =
+  process.env.TOXICITY_MODEL_PATH || path.join(__dirname, "..", "ml", "notebooks", "toxicity_model_tuned.cbm");
+const TOXICITY_SCRIPT_PATH =
+  process.env.TOXICITY_SCRIPT_PATH || path.join(__dirname, "..", "ml", "predict_toxicity.py");
+const TOXICITY_THRESHOLD = Number(process.env.TOXICITY_THRESHOLD || "0.5");
+const IS_TEST_ENV = process.env.NODE_ENV === "test";
+
 app.use(cors({origin: ["http://localhost:3000"],
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"],}));
@@ -33,37 +47,44 @@ app.use("/api/news", newsIndexRoutes);
 app.use("/api/news", newsTrendRoutes);
 app.use("/api/news", newsHeatmapRoutes);
 app.use("/api/news/collect", newsCollectRoutes);
+app.use("/api/map", mapRoutes);
+app.use("/api/ai", aiAssistantRoutes);
+app.use("/api/support", supportRoutes);
 
 
-mongoose
-  .connect(MONGO_URI)
-  .then(async () => {
-    console.log("MongoDB connected");
-    await ensureAdminUser();
-  })
-  .catch((err) => console.error("Mongo error:", err));
+if (!IS_TEST_ENV) {
+  mongoose
+    .connect(MONGO_URI)
+    .then(async () => {
+      console.log("MongoDB connected");
+      await ensureAdminUser();
+    })
+    .catch((err) => console.error("Mongo error:", err));
+}
 
 const ENABLE_CRON = process.env.ENABLE_CRON !== "false";
 
 // Каждый час в 00 минут (например 15:00, 16:00, 17:00...)
 if (ENABLE_CRON) {
-  cron.schedule("0 * * * *", async () => {
-    try {
-      // Avoid running before initial DB connection.
-      if (mongoose.connection.readyState !== 1) {
-        console.log("[cron] skipped: mongo not connected");
-        return;
-      }
+  if (!IS_TEST_ENV) {
+    cron.schedule("0 * * * *", async () => {
+      try {
+        // Avoid running before initial DB connection.
+        if (mongoose.connection.readyState !== 1) {
+          console.log("[cron] skipped: mongo not connected");
+          return;
+        }
 
-      console.log("[cron] collectKapitalJob started");
-      const stats = await runCollectKapitalJob({ perSection: 15, delayMs: 300, maxNew: 20 });
-      console.log("[cron] collectKapitalJob finished:", stats);
-    } catch (e) {
-      console.error("[cron] collectKapitalJob error:", e?.message || e);
-    }
-  });
-  console.log("[cron] enabled: running every hour at minute 0");
-} else {
+        console.log("[cron] collectKapitalJob started");
+        const stats = await runCollectKapitalJob({ perSection: 15, delayMs: 300, maxNew: 20 });
+        console.log("[cron] collectKapitalJob finished:", stats);
+      } catch (e) {
+        console.error("[cron] collectKapitalJob error:", e?.message || e);
+      }
+    });
+    console.log("[cron] enabled: running every hour at minute 0");
+  }
+} else if (!IS_TEST_ENV) {
   console.log("[cron] disabled (ENABLE_CRON=false)");
 }
 
@@ -71,6 +92,66 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
 
 function escapeRegExp(value = "") {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function clampThreshold(value, fallback = 0.5) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(1, Math.max(0, parsed));
+}
+
+function runToxicityCheck(text) {
+  if (!TOXICITY_ENABLED) {
+    return Promise.resolve({ toxic: false, score: 0, threshold: clampThreshold(TOXICITY_THRESHOLD) });
+  }
+
+  const payload = JSON.stringify({
+    text,
+    modelPath: TOXICITY_MODEL_PATH,
+    threshold: clampThreshold(TOXICITY_THRESHOLD),
+  });
+
+  return new Promise((resolve, reject) => {
+    const processRef = spawn(TOXICITY_PYTHON, [TOXICITY_SCRIPT_PATH], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    processRef.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    processRef.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    processRef.on("error", (err) => {
+      reject(err);
+    });
+
+    processRef.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr || `Toxicity process exited with code ${code}`));
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stdout || "{}") || {};
+        resolve({
+          toxic: Boolean(parsed.toxic),
+          score: Number(parsed.score) || 0,
+          threshold: Number(parsed.threshold) || clampThreshold(TOXICITY_THRESHOLD),
+        });
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+    processRef.stdin.write(payload);
+    processRef.stdin.end();
+  });
 }
 
 // ====== Модели =======
@@ -88,6 +169,19 @@ const userSchema = new mongoose.Schema(
 userSchema.methods.toSafeObject = function toSafeObject() {
   return { id: this._id.toString(), name: this.name, email: this.email, role: this.role };
 };
+
+const commentSchema = new mongoose.Schema(
+  {
+    author: {
+      id: { type: String },
+      name: { type: String },
+      email: { type: String },
+    },
+    text: { type: String, required: true, trim: true, maxlength: 1200 },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: true }
+);
 
 const postSchema = new mongoose.Schema(
   {
@@ -114,6 +208,7 @@ const postSchema = new mongoose.Schema(
       name: String,
       email: String,
     },
+    comments: { type: [commentSchema], default: [] },
   },
   { timestamps: true, collection: "posts" }
 );
@@ -272,7 +367,7 @@ app.get(
       }
     }
 
-    let mongoQuery = Post.find(filter);
+    let mongoQuery = Post.find(filter).select("-comments");
     if (sort === "impact") {
       mongoQuery = mongoQuery.sort({ impactScore: -1, createdAt: -1 });
     } else {
@@ -292,6 +387,61 @@ app.get(
       return res.status(404).json({ message: "Материал не найден" });
     }
     res.json(post);
+  })
+);
+
+app.get(
+  "/posts/:id/comments",
+  asyncHandler(async (req, res) => {
+    const post = await Post.findById(req.params.id).select("comments");
+    if (!post) {
+      return res.status(404).json({ message: "Материал не найден" });
+    }
+    res.json(post.comments || []);
+  })
+);
+
+app.post(
+  "/posts/:id/comments",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ message: "Материал не найден" });
+    }
+
+    const text = String(req.body?.text || "").trim();
+    if (!text) {
+      return res.status(400).json({ message: "Введите текст комментария" });
+    }
+
+    try {
+      const toxicity = await runToxicityCheck(text);
+      if (toxicity.toxic) {
+        return res.status(422).json({
+          message: "Комментарий распознан как токсичный и отклонен",
+          toxicity,
+        });
+      }
+    } catch (err) {
+      console.error("Toxicity check failed:", err?.message || err);
+      return res.status(503).json({ message: "Сервис проверки комментариев временно недоступен" });
+    }
+
+    const comment = {
+      author: {
+        id: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+      },
+      text,
+    };
+
+    post.comments.push(comment);
+    await post.save();
+
+    const created = post.comments[post.comments.length - 1];
+    res.status(201).json(created);
   })
 );
 
@@ -418,7 +568,11 @@ app.use((err, req, res, next) => {
   res.status(status).json({ message: err.message || "Серверная ошибка" });
 });
 
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+if (!IS_TEST_ENV) {
+  app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+}
+
+module.exports = app;
 
 
 

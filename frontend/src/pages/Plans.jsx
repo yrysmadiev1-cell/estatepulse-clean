@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import "../components/style.css";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
+import { useUi } from "../context/UiContext";
 
 const PLANS = [
   {
@@ -41,16 +42,17 @@ const PLANS = [
 ];
 
 export default function Plans() {
+  const { t } = useUi();
+
   return (
     <div className="page-shell">
       <SiteHeader actionLabel={null} actionTo={null} />
       <main className="container wide">
         <section className="glass-panel">
-          <p className="eyebrow">Подписка</p>
-          <h1 className="post-title">Планы</h1>
+          <p className="eyebrow">{t("plans.eyebrow")}</p>
+          <h1 className="post-title">{t("plans.title")}</h1>
           <p className="hero-description" style={{ marginTop: 0 }}>
-            Сейчас у всех пользователей активна подписка <strong>Base</strong>. Здесь можно посмотреть варианты
-            планов.
+            {t("plans.description")}
           </p>
 
           <div className="plans-grid">
@@ -58,13 +60,13 @@ export default function Plans() {
               <div className="plans-card__head">
                 <div>
                   <h2 className="section-title" style={{ marginBottom: 6 }}>
-                    Base
+                    {t("plans.base")}
                   </h2>
                   <p className="profile-label" style={{ margin: 0 }}>
-                    Бесплатно
+                    {t("plans.free")}
                   </p>
                 </div>
-                <span className="badge">Текущий</span>
+                <span className="badge">{t("plans.current")}</span>
               </div>
               <ul className="plans-list">
                 <li>Сохранение оценок в истории (ограниченно)</li>
@@ -93,7 +95,7 @@ export default function Plans() {
                 </ul>
                 <div className="plans-actions">
                   <button type="button" className="btn btn-secondary" disabled>
-                    Подключить (скоро)
+                    {t("plans.connectSoon")}
                   </button>
                 </div>
               </div>
@@ -102,7 +104,7 @@ export default function Plans() {
 
           <div className="plans-actions" style={{ marginTop: 18 }}>
             <Link to="/profile" className="btn btn-primary">
-              Вернуться в профиль
+              {t("plans.returnProfile")}
             </Link>
           </div>
         </section>
