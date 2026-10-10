@@ -10,49 +10,11 @@ import { useSearch } from "../hooks/useSearch";
 
 const TAGS = ["Все сегменты", ...CATEGORIES];
 
-const MARKET_METRICS = [
-  {
-    label: "Средняя цена м² по РК",
-    value: "640 000 тг",
-    change: "+1.8%",
-    caption: "за последний месяц",
-    trend: "up",
-  },
-  {
-    label: "Астана • бизнес-класс",
-    value: "980 000 тг",
-    change: "+3.2%",
-    caption: "рост спроса на центр",
-    trend: "up",
-  },
-  {
-    label: "Ставка по ипотеке 7-20-25",
-    value: "11.75%",
-    change: "-0.15 п.п.",
-    caption: "программа субсидирования",
-    trend: "down",
-  },
-  {
-    label: "Ввод новостроек",
-    value: "+420 тыс. м²",
-    change: "+5% г/г",
-    caption: "ноябрь 2025",
-    trend: "up",
-  },
-];
-
-const TICKER_HEADLINES = [
-  "Программа 7-20-25 поддерживает спрос на жильё в Астане",
-  "Алматы утверждает новые ПДП с акцентом на смешанные кварталы",
-  "Нацбанк сохранил базовую ставку: девелоперы пересматривают прайс-листы",
-  "Шымкент расширяет индустриальные парки рядом с новыми магистралями",
-];
-
-const TREND = [
-  { label: "+3.2%", direction: "up" },
-  { label: "-1.1%", direction: "down" },
-  { label: "+0.8%", direction: "up" },
-  { label: "+5.4%", direction: "up" },
+const PROJECT_FACTS = [
+  { label: "География оценки", value: "Астана", caption: "Квартиры в построенных домах" },
+  { label: "Данные модели", value: "Январь 2026", caption: "Снимок цен объявлений" },
+  { label: "Параметры квартиры", value: "9 признаков", caption: "Включая район и год постройки" },
+  { label: "История", value: "Личный кабинет", caption: "Сохранение расчётов после входа" },
 ];
 
 function Home({ cityName = null }) {
@@ -65,10 +27,10 @@ function Home({ cityName = null }) {
   const { query, handleChange, filterByTitle } = useSearch();
   const trimmedQuery = query.trim();
   const isSearching = Boolean(trimmedQuery);
-  const heroTitle = cityName ? `Рынок ${cityName}: ключевые сюжеты` : "Новости, которые влияют на цену квадратного метра";
+  const heroTitle = cityName ? `Рынок ${cityName}: ключевые сюжеты` : "Оцените квартиру. Изучите рынок.";
   const heroLead = cityName
-    ? `Фокусируемся на проектах и сделках ${cityName}. Только локальные инсайты, которые помогают корректировать планы продаж.`
-    : "Аналитика о новостройках, ипотеке и инвестиционных сделках. Собираем ключевые события, чтобы девелоперы, инвесторы и покупатели видели картину рынка без шума.";
+    ? `Публикации о недвижимости: ${cityName}. Материалы добавляет администратор проекта.`
+    : "Дипломный проект: оценка стоимости квартир в Астане с помощью машинного обучения и лента материалов о недвижимости Казахстана.";
   const heroFallbackText = isSearching
     ? `По запросу "${trimmedQuery}" пока нет материалов.`
     : cityName
@@ -85,8 +47,8 @@ function Home({ cityName = null }) {
           setPosts(data || []);
         }
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .catch((err) => { if (mounted) setError(err.message); })
+      .finally(() => { if (mounted) setLoading(false); });
     return () => {
       mounted = false;
     };
@@ -118,49 +80,30 @@ function Home({ cityName = null }) {
         ? `В ${cityName} пока нет публикаций. Добавьте первый материал.`
         : `В этой категории пока нет материалов для ${cityName}. Попробуйте другой фильтр.`)
       : (posts.length === 0
-        ? "Материалы ещё загружаются, возвращайтесь чуть позже."
+        ? "Публикаций пока нет. Вы можете перейти к оценке квартиры."
         : "В выбранной категории пока нет материалов. Попробуйте другую категорию или уточните поиск.");
 
-  if (loading) return <main className="container narrow">Загрузка...</main>;
-  if (error) return <main className="container narrow">Ошибка: {error}</main>;
+
 
   return (
     <div className="page-shell">
-      <SiteHeader actionLabel="Опубликовать прогноз" actionTo="/posts/new" />
+      <SiteHeader actionLabel="Опубликовать материал" actionTo="/posts/new" />
 
       <main className="container wide main-grid">
         <section className="hero-panel glass-panel">
           <div className="hero-copy">
             <p className="eyebrow">
-              Обновление {cityName ? `// ${cityName}` : "// Казахстан"} · {formatDate(new Date().toISOString())}
+              Дипломный проект {cityName ? `· ${cityName}` : "· EstatePulse"}
             </p>
             <h1>{heroTitle}</h1>
             <p className="hero-description">{heroLead}</p>
 
             {cityName && <span className="hero-city-chip">Городской обзор: {cityName}</span>}
 
-            <div className="hero-metrics">
-              <div>
-                <span>Алматы</span>
-                <strong>+3.6%</strong>
-                <small>м/м к октябрю</small>
-              </div>
-              <div>
-                <span>Астана • средний чек</span>
-                <strong>78 млн тг</strong>
-                <small>готовые проекты</small>
-              </div>
-              <div>
-                <span>Ипотека 7-20-25</span>
-                <strong>11.75%</strong>
-                <small>средневзвешенная</small>
-              </div>
-            </div>
-
             <div className="hero-actions">
-              <button type="button" className="btn btn-secondary ghost-btn">Подписаться на дайджест</button>
+              <Link to="/evaluate" className="btn btn-primary">Оценить квартиру</Link>
               {isAdmin && (
-                <Link to="/posts/new" className="btn btn-primary">Опубликовать прогноз</Link>
+                <Link to="/posts/new" className="btn btn-primary">Опубликовать материал</Link>
               )}
             </div>
           </div>
@@ -185,23 +128,13 @@ function Home({ cityName = null }) {
         </section>
 
         <section className="market-snapshot">
-          {MARKET_METRICS.map((metric) => (
+          {PROJECT_FACTS.map((metric) => (
             <article key={metric.label} className="pulse-card glass-panel">
               <p className="pulse-label">{metric.label}</p>
               <p className="pulse-value">{metric.value}</p>
-              <span className={`pulse-change ${metric.trend}`}>{metric.change}</span>
               <small>{metric.caption}</small>
             </article>
           ))}
-        </section>
-
-        <section className="insights-ticker glass-panel">
-          <span className="ticker-label">Лента дня</span>
-          <div className="ticker-track">
-            {TICKER_HEADLINES.map((headline) => (
-              <p key={headline}>{headline}</p>
-            ))}
-          </div>
         </section>
 
         <section className="search-panel glass-panel">
@@ -250,7 +183,9 @@ function Home({ cityName = null }) {
         </section>
 
         <section className="posts-grid">
-          {stories.length === 0 && (
+          {loading && <p role="status">Загружаем публикации…</p>}
+          {error && <p role="alert" className="form-error">Не удалось загрузить публикации: {error}</p>}
+          {!loading && !error && stories.length === 0 && (
             <p className="empty-state glass-panel">
               {emptyStateMessage}
             </p>
@@ -259,13 +194,11 @@ function Home({ cityName = null }) {
           {stories.map((post, index) => {
             const postId = post.id ?? post._id ?? index;
             const segment = post.category || "Аналитика";
-            const trend = TREND[index % TREND.length];
             return (
               <article key={postId} className="post-card glass-panel">
                 <div className="post-card__eyebrow">
                   <span>{segment}</span>
                   {post.city && <span className="post-card__city">{post.city}</span>}
-                  <span className={`trend-flag ${trend.direction}`}>{trend.label}</span>
                 </div>
                 <Link to={`/posts/${postId}`} className="post-card__body">
                   <h3>{post.title}</h3>

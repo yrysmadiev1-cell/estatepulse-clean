@@ -1,51 +1,33 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-
-const AuthContext = createContext({
-  user: null,
-  token: null,
-  login: () => {},
-  logout: () => {},
-});
-
+const AuthContext = createContext({ user: null, token: null, login: () => {}, logout: () => {} });
 const STORAGE_KEY = "estatepulse_auth";
-
+function expiresAt(token) {
+  try { return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; }
+  catch { return 0; }
+}
+function readSession() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    return saved?.user && saved?.token && expiresAt(saved.token) > Date.now() ? saved : null;
+  } catch { return null; }
+}
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
-
+  // Lazy initialization prevents redirects before the saved session is restored.
+  const [session, setSession] = useState(readSession);
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed?.user && parsed?.token) {
-          setUser(parsed.user);
-          setToken(parsed.token);
-        }
-      } catch (err) {
-        console.warn("Не удалось распарсить данные авторизации", err);
-      }
-    }
-  }, []);
-
-  const login = (payload) => {
-    if (!payload?.user || !payload?.token) return;
-    setUser(payload.user);
-    setToken(payload.token);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  };
-
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem(STORAGE_KEY);
-  };
-
-  const value = useMemo(() => ({ user, token, login, logout }), [user, token]);
-
+    if (!session) { localStorage.removeItem(STORAGE_KEY); return; }
+    const timer = setTimeout(() => setSession(null), Math.max(0, expiresAt(session.token) - Date.now()));
+    return () => clearTimeout(timer);
+  }, [session]);
+  const value = useMemo(() => ({
+    user: session?.user || null, token: session?.token || null,
+    login(payload) {
+      if (!payload?.user || !payload?.token) return;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      setSession(payload);
+    },
+    logout() { localStorage.removeItem(STORAGE_KEY); setSession(null); },
+  }), [session]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
-export function useAuth() {
-  return useContext(AuthContext);
-}
+export function useAuth() { return useContext(AuthContext); }

@@ -1,11 +1,13 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-const POSTS_URL = `${API_BASE_URL}/posts`;
+const API_BASE_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const POSTS_URL = `${API_BASE_URL}/api/posts`;
 const AUTH_URL = `${API_BASE_URL}/api`;
 
 async function request(url, options = {}) {
   const res = await fetch(url, options);
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data;
+  try { data = text ? JSON.parse(text) : null; }
+  catch { throw new Error("Сервер вернул некорректный ответ. Проверьте подключение API."); }
 
   if (!res.ok) {
     const message = data?.message || `HTTP ${res.status}`;
@@ -24,7 +26,7 @@ function buildHeaders(token, extra = {}) {
 }
 
 export function getPosts(params = {}) {
-  const url = new URL(POSTS_URL);
+  const url = new URL(POSTS_URL, window.location.origin);
   if (params.city) {
     url.searchParams.set("city", params.city);
   }
@@ -83,3 +85,10 @@ export default {
   registerUser,
   loginUser,
 };
+
+export function getModelMetadata() { return request(`${AUTH_URL}/evaluate/metadata`); }
+export function evaluateProperty(input, token) {
+  return request(`${AUTH_URL}/evaluate`, { method: "POST", headers: buildHeaders(token), body: JSON.stringify(input) });
+}
+export function getEvaluations(token) { return request(`${AUTH_URL}/evaluations`, { headers: buildHeaders(token) }); }
+export function getEvaluation(id, token) { return request(`${AUTH_URL}/evaluations/${encodeURIComponent(id)}`, { headers: buildHeaders(token) }); }

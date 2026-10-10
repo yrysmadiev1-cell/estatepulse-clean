@@ -1,11 +1,13 @@
 {
-  "name": "backend",
-  "version": "1.0.0",
+  "name": "estatepulse-api",
+  "version": "2.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/*.test.js",
+    "test:unit": "node --test tests/routes.test.js",
+    "test:integration": "node --test tests/api.test.js"
   },
   "keywords": [],
   "author": "",
@@ -17,7 +19,15 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.7.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^9.0.0"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^10.4.3",
+    "supertest": "^7.3.1"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

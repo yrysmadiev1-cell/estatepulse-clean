@@ -1,35 +1,30 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const jwt = require("jsonwebtoken");
+const axios = require("axios");
+const { rateLimit } = require("express-rate-limit");
+const { loadConfig } = require("./config");
+const { createAuth } = require("./auth");
+const { createEvaluationRouter } = require("./routes/evaluate");
 const bcrypt = require("bcryptjs");
 const Evaluation = require("./models/Evaluation");
-require("dotenv").config();
-
+const config = loadConfig();
 const app = express();
-const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/blogdb";
-const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-change-me";
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@mail.com";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
-const ADMIN_NAME = process.env.ADMIN_NAME || "admin";
+const { createToken, optionalAuth, requireAuth, requireAdmin } = createAuth(config.jwtSecret);
+const mlClient = axios.create({ baseURL: config.mlUrl, timeout: 15000 });
 const CITY_OPTIONS = ["Алматы", "Астана", "Шымкент"];
 const isValidCity = (value) => CITY_OPTIONS.includes(value);
 
-app.use(cors({origin: ["http://localhost:3000"],
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],}));
-app.use(express.json());
-app.use("/api/evaluate", require("./routes/evaluate"));
-
-
-mongoose
-  .connect(MONGO_URI)
-  .then(async () => {
-    console.log("MongoDB connected");
-    await ensureAdminUser();
-  })
-  .catch((err) => console.error("Mongo error:", err));
+app.disable("x-powered-by");
+app.use(cors({ origin: config.origins, methods: ["GET", "POST", "PATCH", "DELETE"], allowedHeaders: ["Content-Type", "Authorization"] }));
+app.use(express.json({ limit: "32kb" }));
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false, message: { message: "Слишком много попыток входа. Попробуйте позже." } });
+app.use(["/api/login", "/api/register"], authLimiter);
+app.use("/api/evaluate", rateLimit({ windowMs: 60 * 1000, limit: 60, standardHeaders: 'draft-8', legacyHeaders: false, message: { message: "Слишком много запросов оценки" } }), createEvaluationRouter({ optionalAuth, mlClient, Evaluation }));
+app.get("/health", (req, res) => {
+  const ready = mongoose.connection.readyState === 1;
+  res.status(ready ? 200 : 503).json({ status: ready ? "ok" : "unavailable" });
+});
 
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -76,56 +71,18 @@ const Post = mongoose.model("Post", postSchema);
 
 
 const ensureAdminUser = async () => {
-  const existing = await User.findOne({ email: ADMIN_EMAIL.toLowerCase() });
+  if (!config.adminEmail) return;
+  const existing = await User.findOne({ email: config.adminEmail });
   if (existing) return;
 
-  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+  const passwordHash = await bcrypt.hash(config.adminPassword, 12);
   await User.create({
-    name: ADMIN_NAME,
-    email: ADMIN_EMAIL.toLowerCase(),
+    name: config.adminName,
+    email: config.adminEmail,
     passwordHash,
     role: "admin",
   });
-  console.log("Admin user created (", ADMIN_EMAIL, ")");
-};
-
-// ====== Auth helpers =======
-const createToken = (payload) => jwt.sign(payload, JWT_SECRET, { expiresIn: "1h" });
-
-const requireAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!token) {
-    return res.status(401).json({ message: "Требуется авторизация" });
-  }
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ message: "Неверный или просроченный токен" });
-  }
-};
-
-const optionalAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!token) {
-    return next();
-  }
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ message: "Неверный или просроченный токен" });
-  }
-};
-const requireAdmin = (req, res, next) => {
-  if (req.user?.role !== "admin") {
-    return res.status(403).json({ message: "Недостаточно прав" });
-  }
-  return next();
+  console.log("Configured admin user created");
 };
 
 // ====== Auth API =======
@@ -134,11 +91,11 @@ app.post(
   optionalAuth,
   asyncHandler(async (req, res) => {
     const { name, email, password, role = "reader" } = req.body || {};
-    if (!name?.trim() || !email?.trim() || !password?.trim()) {
+    if (typeof name !== "string" || !name.trim() || name.length > 100 || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.length > 254 || typeof password !== "string" || !password.trim()) {
       return res.status(400).json({ message: "Имя, email и пароль обязательны" });
     }
-    if (password.trim().length < 8) {
-      return res.status(400).json({ message: "Пароль должен содержать минимум 8 символов" });
+    if (password.length < 8 || Buffer.byteLength(password, "utf8") > 72) {
+      return res.status(400).json({ message: "Пароль: минимум 8 символов, максимум 72 байта" });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -151,7 +108,7 @@ app.post(
     const requestedRole = allowedRoles.includes(role) ? role : "reader";
     const nextRole = req.user?.role === "admin" ? requestedRole : "reader";
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12);
     const user = await User.create({ name: name.trim(), email: normalizedEmail, passwordHash, role: nextRole });
     const safeUser = user.toSafeObject();
     const token = createToken(safeUser);
@@ -164,7 +121,7 @@ app.post(
   "/api/login",
   asyncHandler(async (req, res) => {
     const { email, password } = req.body || {};
-    if (!email?.trim() || !password?.trim()) {
+    if (typeof email !== "string" || !email.trim() || typeof password !== "string" || !password.trim() || Buffer.byteLength(password, "utf8") > 72) {
       return res.status(400).json({ message: "Email и пароль обязательны" });
     }
 
@@ -187,7 +144,7 @@ app.post(
 
 // ====== Posts API =======
 app.get(
-  "/posts",
+  "/api/posts",
   asyncHandler(async (req, res) => {
     const filter = {};
     const { city } = req.query;
@@ -198,13 +155,13 @@ app.get(
       filter.city = city;
     }
 
-    const posts = await Post.find(filter).sort({ createdAt: -1 });
+    const posts = await Post.find(filter).sort({ createdAt: -1 }).limit(100);
     res.json(posts);
   })
 );
 
 app.get(
-  "/posts/:id",
+  "/api/posts/:id",
   asyncHandler(async (req, res) => {
     const post = await Post.findById(req.params.id);
     if (!post) {
@@ -215,7 +172,7 @@ app.get(
 );
 
 app.post(
-  "/posts",
+  "/api/posts",
   requireAuth,
   requireAdmin,
   asyncHandler(async (req, res) => {
@@ -248,7 +205,7 @@ app.post(
 );
 
 app.patch(
-  "/posts/:id",
+  "/api/posts/:id",
   requireAuth,
   requireAdmin,
   asyncHandler(async (req, res) => {
@@ -279,7 +236,7 @@ app.patch(
 );
 
 app.delete(
-  "/posts/:id",
+  "/api/posts/:id",
   requireAuth,
   requireAdmin,
   asyncHandler(async (req, res) => {
@@ -330,16 +287,27 @@ app.get(
 
 
 
-// ====== Error handling =======
+// Return validation failures without leaking database/stack details.
 app.use((err, req, res, next) => {
-  console.error("Unhandled error", err);
-  const status = err.status || 500;
-  res.status(status).json({ message: err.message || "Серверная ошибка" });
+  if (err.name === "CastError" || err.name === "ValidationError" || err.type === "entity.parse.failed") return res.status(400).json({ message: "Некорректные данные запроса" });
+  if (err.code === 11000) return res.status(409).json({ message: "Запись уже существует" });
+  if (err.status === 413) return res.status(413).json({ message: "Запрос слишком большой" });
+  console.error("Request failed:", err.name || "Error");
+  return res.status(500).json({ message: "Серверная ошибка" });
 });
 
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-
-
-
-
-
+async function start() {
+  await mongoose.connect(config.mongoUri, { serverSelectionTimeoutMS: 10000 });
+  await User.init();
+  await ensureAdminUser();
+  const server = app.listen(config.port, () => console.log(`EstatePulse API listening on port ${config.port}`));
+  const shutdown = () => server.close(() => mongoose.disconnect().finally(() => process.exit(0)));
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
+  return server;
+}
+if (require.main === module) start().catch(err => {
+  console.error("Startup failed:", err.name, "Check database and environment configuration.");
+  process.exit(1);
+});
+module.exports = { app, start, User, Post, Evaluation };

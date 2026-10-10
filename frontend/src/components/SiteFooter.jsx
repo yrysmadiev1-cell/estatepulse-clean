@@ -13,11 +13,11 @@ function SiteFooter() {
         <div className="footer-links">
           <Link to="/">Главная</Link>
           <Link to="/about">О нас</Link>
-          <Link to="/posts/new">Новая публикация</Link>
+          <Link to="/evaluate">Оценить квартиру</Link>
         </div>
         <div className="footer-contact">
-          <p>hello@estatepulse.kz</p>
-          <p>+7 (7172) 000-000</p>
+          <a href="https://github.com/yrysmadiev1-cell/estatepulse-clean">Исходный код на GitHub</a>
+          <p>Дипломный проект Ырысдаулета Мадиева</p>
         </div>
       </div>
       <div className="footer-bottom">

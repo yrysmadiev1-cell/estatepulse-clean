@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import "../components/style.css";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
+import { getEvaluations } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
 
 export default function History() {
@@ -27,21 +28,21 @@ export default function History() {
       return;
     }
 
+    setLoading(true);
+    setErr("");
+    let active = true;
     (async () => {
       try {
-        const resp = await fetch("/api/evaluations", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data?.message || "Ошибка загрузки истории");
-        setItems(Array.isArray(data) ? data : data.value || []);
+        const data = await getEvaluations(token);
+        if (active) setItems(Array.isArray(data) ? data : data.value || []);
       } catch (e) {
-        setErr(e.message);
+        if (active) setErr(e.message);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     })();
-  }, []);
+    return () => { active = false; };
+  }, [token]);
 
   return (
     <div className="page-shell">
