@@ -1,0 +1,63 @@
+services:
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  train:
+    build:
+      context: .
+      dockerfile: ml/Dockerfile
+    command: ["python", "-m", "ml.train"]
+    volumes:
+      - model-data:/app/ml/model
+  ml:
+    build:
+      context: .
+      dockerfile: ml/Dockerfile
+    depends_on:
+      train:
+        condition: service_completed_successfully
+    volumes:
+      - model-data:/app/ml/model:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  backend:
+    build: ./backend
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in the root .env file}
+      MONGO_URI: mongodb://mongo:27017/estatepulse
+      ML_SERVICE_URL: http://ml:8000
+      CORS_ORIGINS: http://localhost:3000
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrator}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      ml:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+volumes:
+  mongo-data:
+  model-data:

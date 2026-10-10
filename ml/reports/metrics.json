@@ -1,0 +1,73 @@
+{
+  "model_version": "astana-v2-923bd5483e-extra_trees-n200",
+  "selected_model": "extra_trees",
+  "dataset_sha256": "923bd5483eaea5fdfe9cbf8d36c40ec1875992f66ed70ee29426dd6bc2d189ee",
+  "city": "Астана",
+  "currency": "KZT",
+  "target": "listing asking price, not transaction price",
+  "data_period": {
+    "from": "2026-01-03T20:50:46.421397",
+    "to": "2026-01-06T00:16:08.635132"
+  },
+  "rows": {
+    "raw": 18388,
+    "clean": 18213,
+    "train": 11625,
+    "validation": 2856,
+    "test": 3732
+  },
+  "split": "GroupShuffleSplit: residential complex; fallback district + address. 20% test groups, then 20% validation groups.",
+  "seed": 42,
+  "features": [
+    "area",
+    "rooms",
+    "floor",
+    "total_floors",
+    "ceiling_height",
+    "year_built",
+    "house_type",
+    "condition",
+    "district"
+  ],
+  "validation": {
+    "median_baseline": {
+      "mae_kzt": 20847273.1092437,
+      "rmse_kzt": 35393487.48436917,
+      "r2": -0.11377856513320728
+    },
+    "random_forest": {
+      "mae_kzt": 8588011.637055881,
+      "rmse_kzt": 15181236.559744105,
+      "r2": 0.7950884514858776
+    },
+    "extra_trees": {
+      "mae_kzt": 8570025.208752787,
+      "rmse_kzt": 15157791.202070424,
+      "r2": 0.7957208788631049
+    }
+  },
+  "test": {
+    "mae_kzt": 7226095.928874266,
+    "rmse_kzt": 12059539.23818256,
+    "r2": 0.8287105135943622
+  },
+  "test_baseline": {
+    "mae_kzt": 18225557.475884244,
+    "rmse_kzt": 30314249.614247527,
+    "r2": -0.08233803894973035
+  },
+  "versions": {
+    "python": "3.12.14",
+    "pandas": "2.2.3",
+    "numpy": "2.3.5",
+    "scikit-learn": "1.8.0"
+  },
+  "limitations": [
+    "January 2026 snapshot, no time-forward validation",
+    "Approximate Astana bounding box",
+    "Group labels are heuristic, not verified building identifiers",
+    "Asking prices, not completed sales",
+    "No forecast of future prices or news signals",
+    "Completed buildings only (year_built <= 2026)"
+  ]
+}

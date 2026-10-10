@@ -1,0 +1,85 @@
+name: Verify EstatePulse
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: ml/requirements*.txt
+      - run: pip install -r ml/requirements-dev.txt
+      - run: python -m pytest -q
+      - run: python -m ml.train
+      - name: Exercise the trained artifact
+        run: |
+          python - <<'PY'
+          from fastapi.testclient import TestClient
+          from ml.service.main import app
+          from ml.tests.test_model import VALID
+          with TestClient(app) as client:
+              assert client.get('/health').status_code == 200
+              result = client.post('/predict', json=VALID)
+              assert result.status_code == 200
+              assert result.json()['predicted_price'] > 0
+          PY
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm test
+        working-directory: backend
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure ephemeral local secret
+        run: python -c "import secrets; open('.env','w').write('JWT_SECRET='+secrets.token_hex(32)+'\n')"
+      - run: docker compose config --quiet
+      - run: docker compose up -d --build
+      - name: Verify the complete stack through Nginx
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          base = 'http://localhost:3000'
+          def call(path, payload=None, token=None):
+              headers = {'Content-Type': 'application/json'}
+              if token: headers['Authorization'] = 'Bearer ' + token
+              req = urllib.request.Request(base + path, data=json.dumps(payload).encode() if payload is not None else None, headers=headers)
+              return json.load(urllib.request.urlopen(req, timeout=30))
+          assert urllib.request.urlopen(base + '/evaluate').status == 200
+          assert urllib.request.urlopen(base + '/posts/new').status == 200
+          assert call('/api/evaluate/metadata')['city'] == 'Астана'
+          account = call('/api/register', {'name': 'CI reader', 'email': 'ci@example.test', 'password': 'ci-test-password-123'})
+          result = call('/api/evaluate', {'area': 65, 'rooms': 2, 'floor': 5, 'total_floors': 9, 'ceiling_height': 2.7, 'year_built': 2015, 'district': 'Есильский р-н', 'house_type': 'кирпичный', 'condition': 'свежий ремонт'}, account['token'])
+          assert result['saved'] and result['predicted_price'] > 0
+          history = call('/api/evaluations', token=account['token'])
+          assert len(history) == 1 and history[0]['model_version'] == result['model_version']
+          print('Registration, model inference, persistence and SPA routes passed')
+          PY
+      - if: failure()
+        run: docker compose logs --tail=80
+      - if: always()
+        run: docker compose down -v

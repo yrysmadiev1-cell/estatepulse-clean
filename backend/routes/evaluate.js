@@ -1,65 +1,44 @@
-const router = require("express").Router();
-const axios = require("axios");
-const jwt = require("jsonwebtoken");
-const Evaluation = require("../models/Evaluation");
+const { Router } = require('express');
 
-const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-change-me";
-
-
-// optional auth: если токен есть — считаем пользователя, если нет — просто сохраняем как guest
-function optionalAuth(req, res, next) {
-  const authHeader = req.headers.authorization || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!token) return next();
-
-  try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    return next();
-  } catch (e) {
-    return res.status(401).json({ message: "Неверный или просроченный токен" });
+function mlError(err, res) {
+  if (err.response?.status === 422) {
+    const details = err.response.data?.detail;
+    const message = Array.isArray(details) ? details.map(x => `${x.loc?.slice(1).join('.') || 'Параметры'}: ${x.msg}`).join('; ') : 'Проверьте параметры объекта';
+    return res.status(422).json({ message });
   }
+  if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') return res.status(504).json({ message: 'Сервис оценки не ответил вовремя. Попробуйте позже.' });
+  return res.status(503).json({ message: 'Сервис оценки временно недоступен' });
 }
 
-router.post("/", optionalAuth, async (req, res) => {
-  try {
-    const input = req.body;
-
-    // 1) вызов ML-сервиса
-    const mlResp = await axios.post("http://127.0.0.1:8000/predict", input);
-    const predicted_price = Number(mlResp.data.predicted_price);
-
-    const area = Number(input.area || 1);
-    const price_per_m2 = predicted_price / area;
-
-    // 2) сохраняем в MongoDB
-    const doc = await Evaluation.create({
-      user: req.user
-        ? { id: req.user.id, name: req.user.name, email: req.user.email }
-        : null,
-      input: {
-        area: Number(input.area),
-        rooms: Number(input.rooms),
-        floor: Number(input.floor),
-        total_floors: Number(input.total_floors),
-        ceiling_height: Number(input.ceiling_height),
-        house_age: Number(input.house_age),
-        house_type: String(input.house_type),
-        condition: String(input.condition),
-      },
-      predicted_price,
-      price_per_m2,
-    });
-
-    // 3) ответ
-    return res.json({
-      evaluation_id: doc._id.toString(),
-      predicted_price,
-      price_per_m2,
-    });
-  } catch (err) {
-    console.error(err?.response?.data || err.message);
-    return res.status(500).json({ message: "ML service error" });
-  }
-});
-
-module.exports = router;
+function createEvaluationRouter({ optionalAuth, mlClient, Evaluation }) {
+  const router = Router();
+  router.get('/metadata', async (req, res) => {
+    try { return res.json((await mlClient.get('/metadata')).data); }
+    catch (err) { return mlError(err, res); }
+  });
+  router.post('/', optionalAuth, async (req, res, next) => {
+    let prediction;
+    try { prediction = (await mlClient.post('/predict', req.body)).data; }
+    catch (err) { return mlError(err, res); }
+    if (!Number.isFinite(prediction.predicted_price) || prediction.predicted_price <= 0 || !Number.isFinite(prediction.price_per_m2) || prediction.price_per_m2 <= 0 || !prediction.input || typeof prediction.model_version !== 'string') {
+      return res.status(502).json({ message: 'Сервис оценки вернул некорректный результат' });
+    }
+    try {
+      // Guests get a prediction without creating inaccessible database records.
+      let evaluationId = null;
+      if (req.user) {
+        const doc = await Evaluation.create({
+          user: { id: req.user.id, name: req.user.name, email: req.user.email },
+          input: prediction.input,
+          predicted_price: prediction.predicted_price,
+          price_per_m2: prediction.price_per_m2,
+          model_version: prediction.model_version,
+        });
+        evaluationId = doc._id.toString();
+      }
+      return res.json({ ...prediction, evaluation_id: evaluationId, saved: Boolean(evaluationId) });
+    } catch (err) { return next(err); }
+  });
+  return router;
+}
+module.exports = { createEvaluationRouter };

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import "../components/style.css";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
+import { getEvaluation } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
 
 const formatPrice = (value) =>
@@ -28,20 +29,20 @@ export default function EvaluationDetail() {
       return;
     }
 
+    setLoading(true);
+    setErr("");
+    let active = true;
     (async () => {
       try {
-        const resp = await fetch(`/api/evaluations/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data?.message || "Ошибка загрузки оценки");
-        setItem(data);
+        const data = await getEvaluation(id, token);
+        if (active) setItem(data);
       } catch (e) {
-        setErr(e.message);
+        if (active) setErr(e.message);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     })();
+    return () => { active = false; };
   }, [id, token]);
 
   return (
@@ -82,6 +83,8 @@ export default function EvaluationDetail() {
 
               <div className="profile-card" style={{ marginTop: 20 }}>
                 <h2 className="section-title">Параметры объекта</h2>
+                <p>{item.input?.city} · {item.input?.district === "unknown" ? "Район не указан" : item.input?.district}</p>
+                <p className="text-muted">Модель: {item.model_version || "Версия 1 (архив)"}. Цена предложения, не сделки.</p>
                 <div className="detail-grid">
                   <div>
                     <span className="profile-label">Площадь</span>
@@ -104,8 +107,8 @@ export default function EvaluationDetail() {
                     <span className="profile-value">{item.input?.ceiling_height}</span>
                   </div>
                   <div>
-                    <span className="profile-label">Возраст дома</span>
-                    <span className="profile-value">{item.input?.house_age} лет</span>
+                    <span className="profile-label">{item.input?.year_built ? "Год постройки" : "Возраст дома (старая оценка)"}</span>
+                    <span className="profile-value">{item.input?.year_built ?? item.input?.house_age}</span>
                   </div>
                 </div>
                 <div className="history-actions" style={{ marginTop: 16 }}>

@@ -10,11 +10,12 @@ function SiteHeader({ actionLabel = "Добавить аналитику", actio
   const canShowAction = actionLabel && actionTo && (actionTo !== "/posts/new" || isAdmin);
   const navLinks = [
     { label: "Рынок РК", pathname: "/" },
+    { label: "Оценка", pathname: "/evaluate" },
     { label: "Профиль", pathname: "/profile" },
     ...CITIES.map((city) => ({
       label: city.name,
       pathname: "/city",
-      search: `?=${encodeURIComponent(city.name)}`,
+      search: `?city=${encodeURIComponent(city.name)}`,
       cityName: city.name,
     })),
     { label: "О нас", pathname: "/about" },
@@ -42,7 +43,7 @@ function SiteHeader({ actionLabel = "Добавить аналитику", actio
       <div className="container wide header-grid">
         <div>
           <Link to="/" className="logo">EstatePulse</Link>
-          <p className="logo-subtitle">новости рынка недвижимости</p>
+          <p className="logo-subtitle">оценка квартир и материалы о недвижимости</p>
         </div>
         <nav className="main-nav">
           {navLinks.map((link) => (

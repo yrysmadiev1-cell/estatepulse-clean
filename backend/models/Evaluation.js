@@ -14,11 +14,16 @@ const evaluationSchema = new mongoose.Schema(
       floor: { type: Number, required: true },
       total_floors: { type: Number, required: true },
       ceiling_height: { type: Number, required: true },
-      house_age: { type: Number, required: true },
+      // Keep house_age readable for records created by v1.
+      house_age: Number,
+      year_built: Number,
+      city: String,
+      district: String,
       house_type: { type: String, required: true },
       condition: { type: String, required: true },
     },
 
+    model_version: String,
     predicted_price: { type: Number, required: true },
     price_per_m2: { type: Number, required: true },
 
